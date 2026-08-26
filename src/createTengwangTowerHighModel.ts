@@ -340,6 +340,7 @@ export function createTengwangTowerHighModel(loadOptions: PavilionModelLoadOptio
       assembly.name = 'tengwang-highmodel-admitted-core';
       root.userData.runtimeLod = 'lod0hp';
       prepareHighModel(assembly);
+      registerPavilionAssembly(root, assembly, 'tengwang');
       root.add(assembly);
       if (assembly.userData.focusBounds instanceof THREE.Box3) {
         root.userData.focusBounds = assembly.userData.focusBounds;
