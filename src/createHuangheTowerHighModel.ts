@@ -3,6 +3,7 @@ import { PAVILION_SPECS } from './createPavilionGalleryModel';
 import { selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
 import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
+import { needsSemanticRecolor, recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
 
 const HUANGHE_LODS: Record<RuntimeLod, string> = {
   lod0: '/assets/huanghe-main-tower-highmodel.glb',
@@ -14,23 +15,40 @@ const HUANGHE_LODS: Record<RuntimeLod, string> = {
 const HUANGHE_PRIMARY_GLB = HUANGHE_LODS.lod0;
 const HUANGHE_FALLBACK_GLB = HUANGHE_LODS.lod1;
 
+// Huanghe wears golden glazed tiles on vermilion timber over a stone podium.
+const HUANGHE_SEMANTIC_PALETTE: SemanticPalette = {
+  roof: 0x8f6a28,
+  timber: 0x5a2a20,
+  vermilion: 0x8c3126,
+  wall: 0xd6c5a3,
+  stone: 0x97917f,
+};
+
 function calibratedMaterial(source: THREE.Material): THREE.Material {
-  const clone = source.clone();
-  clone.transparent = false;
-  clone.opacity = 1;
-  clone.depthWrite = true;
-  clone.depthTest = true;
-  if (clone instanceof THREE.MeshStandardMaterial || clone instanceof THREE.MeshPhysicalMaterial) {
-    clone.roughness = Math.min(clone.roughness, 0.5);
-    clone.metalness = Math.min(clone.metalness, 0.05);
-    clone.envMapIntensity = 0.85;
-    if (clone instanceof THREE.MeshPhysicalMaterial) {
-      clone.clearcoat = 0.18;
-      clone.clearcoatRoughness = 0.28;
+  // Preserve the original GLB material and texture. Only adjust PBR response
+  // so the imported asset behaves consistently under the shared light rig.
+  // Values follow the audited Hermes calibration (env 0.42); stronger
+  // environment response washes the tile atlases out to near-white.
+  if (source instanceof THREE.MeshStandardMaterial || source instanceof THREE.MeshPhysicalMaterial) {
+    const clone = source.clone();
+    clone.transparent = false;
+    clone.opacity = 1;
+    clone.depthWrite = true;
+    clone.depthTest = true;
+    clone.roughness = Math.min(clone.roughness, 0.72);
+    clone.metalness = Math.min(clone.metalness, 0.12);
+    clone.envMapIntensity = 0.42;
+    // The exported roof material (#25/#26) carries a near-white grunge mask as
+    // its base-colour texture (avg #cacaca) instead of a glazed-tile atlas, so
+    // the roofs render white. Strip it; the semantic placeholder recolour then
+    // gives these faces the golden-tile response with procedural ridges.
+    if (/material #2[56]/i.test(source.name ?? '') && clone.map) {
+      clone.map = null;
     }
+    clone.name = `${source.name}-huanghe-calibrated`;
+    return clone;
   }
-  clone.name = `${source.name}-huanghe-calibrated`;
-  return clone;
+  return source;
 }
 
 function prepareHighModel(assembly: THREE.Group): void {
@@ -47,6 +65,13 @@ function prepareHighModel(assembly: THREE.Group): void {
       return material;
     });
     object.material = Array.isArray(object.material) ? calibrated : calibrated[0];
+    // Placeholder materials (no texture, near-white diffuse) carry large
+    // vertex counts in this asset; recolour their faces semantically instead
+    // of showing blank clay.
+    const effective = Array.isArray(object.material) ? object.material[0] : object.material;
+    if (needsSemanticRecolor(effective)) {
+      recolorMeshSurfaces(object, HUANGHE_SEMANTIC_PALETTE);
+    }
     object.castShadow = true;
     object.receiveShadow = true;
   });
