@@ -83,6 +83,7 @@ const reviewView = reviewParams.get('view');
 const requestedLightMode = reviewParams.get('light');
 const noShadow = reviewParams.get('noshadow') === '1';
 const hideGLB = reviewParams.get('hideglb') === '1';
+const debugLoop = reviewParams.get('debug') === '1';
 const lightMode: 'neutral' | 'grazing' | 'reference' = requestedLightMode === 'neutral' || requestedLightMode === 'grazing'
   ? requestedLightMode
   : 'reference';
@@ -152,7 +153,6 @@ function updateControlDistances(bounds: THREE.Box3) {
   const maxDistance = Math.max(68, span * 1.6);
   controls.minDistance = minDistance;
   controls.maxDistance = maxDistance;
-  console.log('[controls] updated distances', { span, minDistance, maxDistance });
 }
 
 let activeSpec: PavilionSpec = PAVILION_SPECS[0];
@@ -177,7 +177,6 @@ function frameModel(view = activeView) {
   lowAngleButton?.setAttribute('aria-pressed', String(lowAngleActive));
   if (lowAngleButton) lowAngleButton.textContent = lowAngleActive ? '退出仰视' : '仰视建筑';
   const bounds = new THREE.Box3().setFromObject(activeModel);
-  console.log('[frameModel] bounds:', bounds.min.toString(), '->', bounds.max.toString(), 'span:', Math.max(...bounds.getSize(new THREE.Vector3()).toArray()));
   // Loaders that carry a large site (e.g. the Penglai walled courtyard) expose
   // a focus box around the main building; frame the camera on that so the
   // pavilion stays inspectable while the courtyard extends around it.
@@ -194,7 +193,6 @@ function frameModel(view = activeView) {
     ? (window.innerWidth < 720 ? 1.0 : 1.2)
     : (window.innerWidth < 720 ? 1.96 : 1.62);
   const distance = Math.max(span * distanceMultiplier, 12);
-  console.log('[frameModel] centre:', centre.toString(), 'span:', span, 'distance:', distance, 'multiplier:', distanceMultiplier);
   const reviewDirections: Record<string, THREE.Vector3> = {
     front: new THREE.Vector3(0, 0.22, 1),
     right: new THREE.Vector3(1, 0.22, 0),
@@ -346,12 +344,8 @@ function activateModel(model: THREE.Group, spec: PavilionSpec) {
   activeModel.children.forEach((part) => {
     if (!part.userData.explodeOrigin) part.userData.explodeOrigin = part.position.clone();
   });
-  if (!hideGLB) {
-    scene.add(activeModel);
-  } else {
-    scene.add(activeModel);
-    model.visible = false;
-  }
+  scene.add(activeModel);
+  if (hideGLB) model.visible = false;
   
   // Expose for debugging
   window.__activeModelDebug = {
@@ -524,7 +518,7 @@ toggleDebugScreenshotButton?.addEventListener('click', async () => {
   }
 });
 window.addEventListener('keydown', (event) => {
-  if (event.key >= '1' && event.key <= '4') {
+  if (event.key >= '1' && event.key <= '3') {
     const spec = PAVILION_SPECS[Number(event.key) - 1];
     if (spec) selectPavilion(spec.id);
   }
@@ -538,9 +532,7 @@ window.addEventListener('keydown', (event) => {
   }
 });
 window.addEventListener('china-towers-model-ready', (event) => {
-  console.log('[main] china-towers-model-ready event received:', (event as CustomEvent<string>).detail, 'activeSpec:', activeSpec?.id);
   if ((event as CustomEvent<string>).detail === activeSpec.id) {
-    console.log('[main] Framing model after ready event');
     frameModel();
     window.__CHINA_TOWERS_READY__ = true;
     if (window.__CHINA_TOWERS_UI__) {
@@ -631,15 +623,16 @@ function render() {
     window.__CHINA_TOWERS_DIAGNOSTICS__.explodedAmount = assemblyRuntime?.explodedAmount ?? 0;
   }
   renderer.render(scene, camera);
-  if (activeSpec.id === 'tengwang') {
+  if (debugLoop && activeSpec.id === 'tengwang') {
     console.log('[Tengwang] render loop active, diagnostics ready:', !!window.__CHINA_TOWERS_DIAGNOSTICS__?.ready, 'model:', activeModel?.name, 'children:', activeModel?.children.length);
   }
   if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
     window.__CHINA_TOWERS_DIAGNOSTICS__.renderCalls = renderer.info.render.calls;
     window.__CHINA_TOWERS_DIAGNOSTICS__.renderTriangles = renderer.info.render.triangles;
   }
-  // Tengwang debug: sample center pixel from the renderer to verify visibility.
-  if (activeSpec.id === 'tengwang' && renderer.info.render.calls > 0) {
+  // Debug only (?debug=1): sample center pixel from the renderer to verify
+  // visibility. readPixels stalls the GPU pipeline and must never run per-frame.
+  if (debugLoop && activeSpec.id === 'tengwang' && renderer.info.render.calls > 0) {
     try {
       const gl = renderer.getContext();
       const pixels = new Uint8Array(4);

@@ -60,39 +60,18 @@ async function responseBuffer(response: Response, options: PavilionModelLoadOpti
 export async function loadVerifiedGlb(url: string, options: PavilionModelLoadOptions = {}): Promise<GLTF> {
   if (!url.startsWith('/assets/') || !url.endsWith('.glb')) throw new Error(`Rejected runtime asset URL: ${url}`);
   if (options.signal?.aborted) throw abortError();
-  console.log('[loadVerifiedGlb] Starting fetch for', url);
   const response = await fetch(url, { signal: options.signal, cache: 'force-cache', credentials: 'same-origin' });
-  console.log('[loadVerifiedGlb] Fetch response status:', response.status, 'for', url);
   if (!response.ok) throw new Error(`Failed to load ${url}: HTTP ${response.status}`);
-  console.log('[loadVerifiedGlb] Reading buffer for', url);
   const buffer = await response.arrayBuffer();
-  console.log('[loadVerifiedGlb] Buffer read complete, size:', buffer.byteLength, 'for', url);
   if (options.signal?.aborted) throw abortError();
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const baseUrl = new URL('.', new URL(url, window.location.href)).href;
-  console.log('[loadVerifiedGlb] Parsing GLB for', url);
   const gltf = await loader.parseAsync(buffer, baseUrl);
-  console.log('[loadVerifiedGlb] GLB parsed successfully for', url);
   if (options.signal?.aborted) {
     disposeScene(gltf.scene);
     throw abortError();
   }
-
-  let meshCount = 0;
-  let materialSummary: string[] = [];
-  gltf.scene.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return;
-    meshCount += 1;
-    const materials = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of materials) {
-      const name = typeof material.name === 'string' ? material.name : 'unknown';
-      const hasMap = Boolean((material as THREE.MeshStandardMaterial).map);
-      materialSummary.push(`${name}${hasMap ? '+map' : ''}`);
-    }
-  });
-
-  console.log('[loadVerifiedGlb]', url, 'meshes=', meshCount, 'materials=', materialSummary.slice(0, 20));
 
   return gltf;
 }
