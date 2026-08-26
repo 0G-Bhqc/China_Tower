@@ -1,0 +1,475 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-24T13:45:47.700Z",
+  "policy": {
+    "sourceMaxAtRuntime": false,
+    "verifiedInterchangeOnly": true,
+    "lod0Role": "immutable high-fidelity master",
+    "defaultRuntimeTarget": "lod1",
+    "mobileRuntimeTarget": "lod2",
+    "maxUncompressedGlbBytes": 41943040
+  },
+  "assets": [
+    {
+      "id": "yueyang",
+      "nameCN": "岳阳楼",
+      "source": {
+        "path": "3D资产/岳阳楼/3d66.com_22732580.max",
+        "sha256": "29312a494e1da917f30d18b4f5e7e199ffdee52eb77d331b514be47fc2b5dcf4",
+        "faces": 1329613
+      },
+      "runtime": {
+        "loader": "createYueyangTowerFormModel",
+        "defaultTier": "lod1",
+        "tiers": {
+          "lod0": {
+            "purpose": "hero/master",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/yueyang-architectural-lod.glb",
+                "gltfVersion": 2,
+                "bytes": 24278972,
+                "sha256": "cf49502df431b7e40bc34d62576e938f0a9ba756aabb984f82e923fe20a18884",
+                "meshCount": 311,
+                "primitiveCount": 601,
+                "triangles": 494282,
+                "materialCount": 10,
+                "compression": {
+                  "meshopt": false
+                },
+                "extensionsUsed": [
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": []
+              }
+            ],
+            "totals": {
+              "bytes": 24278972,
+              "meshes": 311,
+              "primitives": 601,
+              "triangles": 494282,
+              "materials": 10
+            }
+          },
+          "lod1": {
+            "purpose": "desktop/default",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/yueyang-architectural-lod1.glb",
+                "gltfVersion": 2,
+                "bytes": 9140308,
+                "sha256": "0688c32e93e1b0d90ac1de12de8494531de051a91966fa54f32a3f7669a74eb3",
+                "meshCount": 324,
+                "primitiveCount": 614,
+                "triangles": 417940,
+                "materialCount": 10,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 9140308,
+              "meshes": 324,
+              "primitives": 614,
+              "triangles": 417940,
+              "materials": 10
+            }
+          },
+          "lod2": {
+            "purpose": "mobile/far",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/yueyang-architectural-lod2.glb",
+                "gltfVersion": 2,
+                "bytes": 8716772,
+                "sha256": "4a8822b924ed34211dd3f88f3912a684731d8b5a60dcc6f94ea6c235889204c6",
+                "meshCount": 324,
+                "primitiveCount": 614,
+                "triangles": 389904,
+                "materialCount": 10,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 8716772,
+              "meshes": 324,
+              "primitives": 614,
+              "triangles": 389904,
+              "materials": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "huanghe",
+      "nameCN": "黄鹤楼",
+      "source": {
+        "path": "3D资产/黄鹤楼/3d66.com_20515822.max",
+        "sha256": "a9010b69742c44a4c71a315c75eb5b713672753c14764c83ff4c8de2731a0664",
+        "faces": 2987155
+      },
+      "runtime": {
+        "loader": "createHuangheTowerHighModel",
+        "defaultTier": "lod1",
+        "tiers": {
+          "lod0": {
+            "purpose": "hero/master",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/huanghe-main-tower-highmodel.glb",
+                "gltfVersion": 2,
+                "bytes": 73981736,
+                "sha256": "78772bc6ca1e47c1fd7622ccfbb9d3952958c4a446c905f3ba9fc5d9aa8e5aeb",
+                "meshCount": 11,
+                "primitiveCount": 11,
+                "triangles": 2776514,
+                "materialCount": 11,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 73981736,
+              "meshes": 11,
+              "primitives": 11,
+              "triangles": 2776514,
+              "materials": 11
+            }
+          },
+          "lod1": {
+            "purpose": "desktop/default",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/huanghe-main-tower-lod1.glb",
+                "gltfVersion": 2,
+                "bytes": 62489364,
+                "sha256": "9042a09da4852cbe55a417e306a98e04bc7daebf1d749df0a70a17df3e6c7000",
+                "meshCount": 11,
+                "primitiveCount": 11,
+                "triangles": 2394103,
+                "materialCount": 11,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 62489364,
+              "meshes": 11,
+              "primitives": 11,
+              "triangles": 2394103,
+              "materials": 11
+            }
+          },
+          "lod2": {
+            "purpose": "mobile/far",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/huanghe-main-tower-lod2.glb",
+                "gltfVersion": 2,
+                "bytes": 41504396,
+                "sha256": "5113e7706b92439b7abd1db2a099ee1bf1c263d5842a73d57a415b3c032c66d5",
+                "meshCount": 11,
+                "primitiveCount": 11,
+                "triangles": 1368513,
+                "materialCount": 11,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 41504396,
+              "meshes": 11,
+              "primitives": 11,
+              "triangles": 1368513,
+              "materials": 11
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "tengwang",
+      "nameCN": "滕王阁",
+      "source": {
+        "path": "3D资产/滕王阁/3d66.com_13009910.max",
+        "sha256": "4885ccf621a4cd32c5bf6fa51bce19d0d1cda1039a191675cd3722ad6ae1a506",
+        "faces": 5148034
+      },
+      "runtime": {
+        "loader": "createTengwangTowerHighModel",
+        "defaultTier": "lod1",
+        "tiers": {
+          "lod0": {
+            "purpose": "hero/master",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/tengwang-high-precision/tengwang-22753718.glb",
+                "gltfVersion": 2,
+                "bytes": 426326380,
+                "sha256": "53e87792f62c5afb48a72c1fcfc1a9b0bb6c10d9942beae8911a4e590aceea69",
+                "meshCount": 4546,
+                "primitiveCount": 4794,
+                "triangles": 8375466,
+                "materialCount": 83,
+                "compression": {
+                  "meshopt": false
+                },
+                "extensionsUsed": [
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": []
+              }
+            ],
+            "totals": {
+              "bytes": 426326380,
+              "meshes": 4546,
+              "primitives": 4794,
+              "triangles": 8375466,
+              "materials": 83
+            }
+          },
+          "lod1": {
+            "purpose": "desktop/default",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/tengwang-main-tower-lod1.glb",
+                "gltfVersion": 2,
+                "bytes": 8894000,
+                "sha256": "33bd352f3a7847b284a594d43e65bc3ef94afd9a76f2adeeaf4d9cd9d290c184",
+                "meshCount": 17,
+                "primitiveCount": 17,
+                "triangles": 110216,
+                "materialCount": 17,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 8894000,
+              "meshes": 17,
+              "primitives": 17,
+              "triangles": 110216,
+              "materials": 17
+            }
+          },
+          "lod2": {
+            "purpose": "mobile/far",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/tengwang-main-tower-lod2.glb",
+                "gltfVersion": 2,
+                "bytes": 7559640,
+                "sha256": "8c4ca0a3c6f252d5f01bfd77d1ebf2488f26da4859164bb683ddbe8202747a51",
+                "meshCount": 17,
+                "primitiveCount": 17,
+                "triangles": 63506,
+                "materialCount": 17,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 7559640,
+              "meshes": 17,
+              "primitives": 17,
+              "triangles": 63506,
+              "materials": 17
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "penglai",
+      "nameCN": "蓬莱阁",
+      "source": {
+        "path": "3D资产/蓬莱阁/3d66.com_24241301.max",
+        "sha256": "b21fb39b092fcb31bf86b01a14847c77a2c96b8ae53649b94aff81370efe3e5e",
+        "faces": 4059799
+      },
+      "runtime": {
+        "loader": "createPenglaiPavilionHighModel",
+        "defaultTier": "lod1",
+        "tiers": {
+          "lod0": {
+            "purpose": "hero/master",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/penglai-main-pavilion-highmodel.glb",
+                "gltfVersion": 2,
+                "bytes": 173002892,
+                "sha256": "e4930bee9c74be5444ab1b4c9ee8f159c9f71cde759d58bb195dc7fcde42afd9",
+                "meshCount": 83,
+                "primitiveCount": 83,
+                "triangles": 4059799,
+                "materialCount": 82,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular",
+                  "KHR_texture_transform"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression",
+                  "KHR_texture_transform"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 173002892,
+              "meshes": 83,
+              "primitives": 83,
+              "triangles": 4059799,
+              "materials": 82
+            }
+          },
+          "lod1": {
+            "purpose": "desktop/default",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/penglai-main-pavilion-lod1.glb",
+                "gltfVersion": 2,
+                "bytes": 109911860,
+                "sha256": "3826bd82b835e3569ef458f62a319f2a4b05fe2553d63c8d62a6966a50dbcf56",
+                "meshCount": 83,
+                "primitiveCount": 83,
+                "triangles": 2866003,
+                "materialCount": 83,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular",
+                  "KHR_texture_transform"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression",
+                  "KHR_texture_transform"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 109911860,
+              "meshes": 83,
+              "primitives": 83,
+              "triangles": 2866003,
+              "materials": 83
+            }
+          },
+          "lod2": {
+            "purpose": "mobile/far",
+            "status": "ready",
+            "files": [
+              {
+                "url": "/assets/penglai-main-pavilion-lod2.glb",
+                "gltfVersion": 2,
+                "bytes": 77597752,
+                "sha256": "8256a302e4670ef42d14010b72fe76aa2acf9b17ffa2bac55c8c19648af23e24",
+                "meshCount": 83,
+                "primitiveCount": 83,
+                "triangles": 1867470,
+                "materialCount": 83,
+                "compression": {
+                  "meshopt": true
+                },
+                "extensionsUsed": [
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular",
+                  "KHR_texture_transform"
+                ],
+                "extensionsRequired": [
+                  "EXT_meshopt_compression",
+                  "KHR_texture_transform"
+                ]
+              }
+            ],
+            "totals": {
+              "bytes": 77597752,
+              "meshes": 83,
+              "primitives": 83,
+              "triangles": 1867470,
+              "materials": 83
+            }
+          }
+        }
+      }
+    }
+  ],
+  "totals": {
+    "bytes": 697589980,
+    "triangles": 15706061,
+    "assetCount": 4
+  }
+}

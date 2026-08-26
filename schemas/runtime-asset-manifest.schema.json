@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://china-tower.local/schemas/runtime-asset-manifest.schema.json",
+  "title": "RuntimeAssetManifest",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "policy", "assets", "totals"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "policy": {
+      "type": "object",
+      "required": ["sourceMaxAtRuntime", "verifiedInterchangeOnly", "lod0Role", "defaultRuntimeTarget", "mobileRuntimeTarget", "maxUncompressedGlbBytes"]
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["id", "nameCN", "source", "runtime"]
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["bytes", "triangles", "assetCount"]
+    }
+  },
+  "additionalProperties": false
+}

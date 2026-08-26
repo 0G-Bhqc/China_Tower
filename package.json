@@ -1,0 +1,45 @@
+{
+  "name": "chinese-towers-yueyang-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "validate:asset-pipeline": "node scripts/validate-asset-pipeline.mjs",
+    "validate:source-hashes": "node scripts/validate-asset-pipeline.mjs --verify-hashes",
+    "generate:runtime-manifest": "node scripts/generate-runtime-asset-manifest.mjs",
+    "validate:runtime-manifest": "node scripts/validate-runtime-asset-manifest.mjs --verify-hashes",
+    "smoke:runtime-loading": "node scripts/smoke-runtime-loading.cjs",
+    "v3:prepare": "node scripts/prepare-v3-jobs.mjs",
+    "v3:validate": "node scripts/validate-v3-jobs.mjs",
+    "v3:dissect": "node scripts/run-v3-blender-dissection.mjs",
+    "v3:patterns": "node scripts/analyze-v3-component-patterns.mjs",
+    "v3:semantic": "node scripts/run-v3-semantic-partition.mjs",
+    "v3:hierarchy": "node scripts/run-v3-semantic-hierarchy.mjs",
+    "validate:semantic-coverage": "node scripts/validate-semantic-coverage.mjs",
+    "validate:structure-mapping": "node scripts/validate-v3-structure-mapping.mjs",
+    "smoke:quality-tiers": "node scripts/smoke-quality-tiers.cjs",
+    "smoke:degraded-loading": "node scripts/smoke-degraded-loading.cjs",
+    "audit:runtime-performance": "node scripts/audit-runtime-performance.cjs",
+    "validate:runtime-parts": "node scripts/validate-runtime-parts.mjs",
+    "validate:scene-packages": "node scripts/validate-scene-packages.mjs",
+    "prepare:asset-jobs": "node scripts/prepare-asset-jobs.mjs",
+    "analyze:fbx": "node scripts/run-blender-analysis.mjs",
+    "render:fbx-evidence": "node scripts/run-blender-evidence.mjs",
+    "convert:max": "node scripts/run-isolated-max-conversion.mjs",
+    "verify:max-conversion": "node scripts/verify-isolated-max-conversion.mjs",
+    "build:final-html": "node node_modules/typescript/bin/tsc --noEmit && node node_modules/vite/bin/vite.js build && node scripts/build-final-html.mjs && node scripts/verify-final-html.mjs",
+    "verify:final-html": "node scripts/verify-final-html.mjs"
+  },
+  "dependencies": {
+    "three": "0.179.1"
+  },
+  "devDependencies": {
+    "@types/three": "0.179.0",
+    "playwright": "^1.62.1",
+    "typescript": "5.9.2",
+    "vite": "7.1.2"
+  }
+}

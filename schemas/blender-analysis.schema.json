@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.china-tower/schemas/blender-analysis.schema.json",
+  "title": "BlenderAnalysis",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "jobId",
+    "assetId",
+    "provenance",
+    "coordinateSystem",
+    "inventory",
+    "measurements",
+    "views",
+    "issues"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "jobId": { "type": "string", "minLength": 8 },
+    "assetId": { "enum": ["yueyang", "huanghe", "tengwang", "feiyun", "penglai"] },
+    "provenance": {
+      "type": "object",
+      "required": ["sourceSha256", "analyzerVersion", "profileVersion"],
+      "properties": {
+        "sourceSha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "analyzerVersion": { "type": "string" },
+        "profileVersion": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "required": ["unit", "upAxis", "forwardAxis", "toThreejsMatrix"],
+      "properties": {
+        "unit": { "const": "meter" },
+        "upAxis": { "const": "Z" },
+        "forwardAxis": { "const": "-Y" },
+        "toThreejsMatrix": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "required": ["objects", "meshes", "materials", "vertices", "triangles", "boundsMeters"],
+      "properties": {
+        "objects": { "type": "integer", "minimum": 0 },
+        "meshes": { "type": "integer", "minimum": 0 },
+        "materials": { "type": "integer", "minimum": 0 },
+        "instances": { "type": "integer", "minimum": 0 },
+        "vertices": { "type": "integer", "minimum": 0 },
+        "triangles": { "type": "integer", "minimum": 0 },
+        "boundsMeters": {
+          "type": "object",
+          "required": ["width", "height", "depth"],
+          "properties": {
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "depth": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "value", "unit", "source", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "value": { "type": "number" },
+          "unit": { "enum": ["meter", "degree", "ratio", "count"] },
+          "source": { "enum": ["mesh", "hierarchy", "cluster-hypothesis", "manual-review", "published-dimension"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "status", "confidence", "evidenceRefs"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "status": { "enum": ["hypothesis", "reviewed", "rejected"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidenceRefs": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        }
+      }
+    },
+    "views": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "camera", "passes"],
+        "properties": {
+          "name": { "enum": ["front", "right", "rear", "left", "top", "three-quarter"] },
+          "camera": { "type": "object" },
+          "passes": {
+            "type": "object",
+            "required": ["beauty", "alpha-silhouette", "semantic-id", "depth", "normal", "material-id"]
+          }
+        }
+      },
+      "minItems": 6
+    },
+    "issues": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "coordinateContract": "Source FBX audit coordinates use x/y as horizontal and z as height; package export maps them to Three.js x/z horizontal and y height.",
+  "packages": {
+    "yueyang": {
+      "assetId": "yueyang",
+      "sourceFbx": "evidence/3d-assets/jobs/yueyang/outputs/full-scene.fbx",
+      "outputGlb": "public/assets/scene-pack/yueyang-environment.glb",
+      "report": "evidence/scene-packs/yueyang-environment.json",
+      "sourceCenter": [13.196891, 9.179454, 0],
+      "sourceAxes": {"x": 0.9925, "y": 0.79, "z": 1},
+      "normalization": {"mode": "explicit", "offset": [0, 0, 1.0]},
+      "envelope": {"x": [-1, 22.5], "y": [-1, 20.5], "z": [-1, 21]},
+      "includeParentNames": ["__NO_INDEPENDENT_YUEYANG_ENVIRONMENT__"],
+      "excludeNames": ["Cube", "3d66-Plane-22732580-001"],
+      "excludeNamePrefixes": [],
+      "layerRules": [
+        {"id": "near", "maxDistance": 18},
+        {"id": "mid", "maxDistance": 32},
+        {"id": "far", "maxDistance": 9999}
+      ]
+    },
+    "huanghe": {
+      "assetId": "huanghe",
+      "sourceFbx": "evidence/3d-assets/jobs/huanghe/outputs/full-scene.fbx",
+      "outputGlb": "public/assets/scene-pack/huanghe-environment.glb",
+      "report": "evidence/scene-packs/huanghe-environment.json",
+      "sourceCenter": [163.6776123, -482.3624878, 0],
+      "sourceAxes": {"x": 0.42, "y": 0.42, "z": 0.42},
+      "normalization": {"mode": "explicit", "offset": [0, 0, 1.12]},
+      "envelope": {"x": [126, 202], "y": [-520, -444], "z": [-4, 62]},
+      "admissionCenter": [163.6776123, -482.3624878, 0],
+      "excludeCenterRadius": 30,
+      "maxObjectSpan": 38,
+      "excludeNames": ["Cube"],
+      "excludeNamePrefixes": [],
+      "layerRules": [
+        {"id": "near", "maxDistance": 36},
+        {"id": "mid", "maxDistance": 52},
+        {"id": "far", "maxDistance": 9999}
+      ]
+    },
+    "tengwang": {
+      "assetId": "tengwang",
+      "sourceFbx": "evidence/3d-assets/jobs/tengwang/outputs/full-scene.fbx",
+      "outputGlb": "public/assets/scene-pack/tengwang-environment.glb",
+      "report": "evidence/scene-packs/tengwang-environment.json",
+      "sourceCenter": [-113.2, 42.9, 0],
+      "sourceAxes": {"x": 0.192, "y": 0.192, "z": 0.192},
+      "normalization": {"mode": "explicit", "offset": [0, 0, 0.02]},
+      "envelope": {"x": [-180, -15], "y": [100, 320], "z": [-8, 55]},
+      "admissionCenter": [-113.2, 42.9, 0],
+      "maxObjectSpan": 500,
+      "includeParentNames": ["Group-13009910-9-377"],
+      "excludeNames": ["Cube"],
+      "excludeNamePrefixes": [],
+      "layerRules": [
+        {"id": "near", "maxDistance": 70},
+        {"id": "mid", "maxDistance": 170},
+        {"id": "far", "maxDistance": 9999}
+      ]
+    }
+  }
+}

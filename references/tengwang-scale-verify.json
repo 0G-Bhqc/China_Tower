@@ -1,0 +1,53 @@
+{
+  "diagnostics": {
+    "activeId": "tengwang",
+    "modelName": "tengwang-highmodel-root",
+    "runtimeLod": "lod1",
+    "ready": true,
+    "loadError": false,
+    "degraded": false,
+    "failureReason": null,
+    "assetState": "ready",
+    "partCount": 505,
+    "selectedPart": null,
+    "explodedAmount": 0,
+    "qualityProfile": "standard",
+    "pixelRatioCap": 1.35,
+    "appliedPixelRatio": 1,
+    "shadowMapSize": 1536,
+    "shadowTechnique": "pcf-soft",
+    "shadowRadius": 3,
+    "shadowBlurSamples": 8,
+    "toneMappingExposure": 1.02,
+    "environmentIntensity": 1,
+    "lightMode": "reference",
+    "renderCalls": 507,
+    "renderTriangles": 5157945
+  },
+  "model": {
+    "name": "tengwang-highmodel-root",
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "boundsMin": [
+      -1862785.875,
+      -304950.09375,
+      -1862785.875
+    ],
+    "boundsMax": [
+      1862785.875,
+      1862785.875,
+      1862785.875
+    ],
+    "span": 3725571.75,
+    "totalVertices": 8203517,
+    "childrenCount": 2
+  }
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e4e8e2" />
+    <meta name="description" content="五座经 DCC 高模解析的中国楼阁 Three.js 展示" />
+    <title>中国楼阁 · 高模 3D 藏品</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="scene" tabindex="0" aria-label="中国楼阁高模三维展示，可旋转并选择构件"></canvas>
+
+    <div id="loader" class="loader" aria-hidden="false">
+      <div class="loader-inner">
+        <div class="loader-brand">中国楼阁</div>
+        <div class="loader-sub">高模 3D 藏品</div>
+        <div class="loader-track" aria-hidden="true">
+          <div id="loader-bar" class="loader-bar"></div>
+        </div>
+        <div id="loader-status" class="loader-status">准备加载…</div>
+      </div>
+    </div>
+
+    <main class="shell">
+      <header class="intro">
+        <p class="eyebrow">FIVE VERIFIED DCC HIGH MODELS</p>
+        <h1 id="tower-title">岳阳楼</h1>
+        <p class="english" id="tower-english">YUEYANG TOWER</p>
+        <p class="location" id="tower-location">湖南 · 岳阳 · 三层盔顶 · 临洞庭湖</p>
+        <p class="description" id="tower-description">飞檐层叠、暗红梁柱与开阔回廊构成的临水楼阁。</p>
+      </header>
+
+      <nav class="pavilion-nav" aria-label="楼阁选择">
+        <button class="is-active" aria-pressed="true" data-pavilion="yueyang">
+          <span class="nav-index"><b>01</b></span>
+          <span class="nav-label">岳阳楼</span>
+        </button>
+        <button aria-pressed="false" data-pavilion="huanghe">
+          <span class="nav-index"><b>02</b></span>
+          <span class="nav-label">黄鹤楼</span>
+        </button>
+        <button aria-pressed="false" data-pavilion="tengwang">
+          <span class="nav-index"><b>03</b></span>
+          <span class="nav-label">滕王阁</span>
+        </button>
+        <button aria-pressed="false" data-pavilion="penglai">
+          <span class="nav-index"><b>04</b></span>
+          <span class="nav-label">蓬莱阁</span>
+        </button>
+        <button aria-pressed="false" data-pavilion="feiyun">
+          <span class="nav-index"><b>05</b></span>
+          <span class="nav-label">飞云楼</span>
+        </button>
+      </nav>
+
+      <section class="controls" aria-label="模型控制">
+        <button id="explode" aria-pressed="false" aria-keyshortcuts="E">展开构件</button>
+        <button id="low-angle" aria-pressed="false" aria-keyshortcuts="V">仰视建筑</button>
+        <button id="reset-view" aria-keyshortcuts="R">重置视角</button>
+        <button id="toggle-debug-screenshot" aria-keyshortcuts="D">保存诊断截图</button>
+      </section>
+
+      <section class="model-meta" id="model-meta" aria-label="模型信息" hidden>
+        <div class="meta-row">
+          <span class="meta-key">模型</span>
+          <span class="meta-value" id="meta-model-name">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">精度档位</span>
+          <span class="meta-value" id="meta-lod">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">三角形</span>
+          <span class="meta-value" id="meta-triangles">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">构件数</span>
+          <span class="meta-value" id="meta-parts">—</span>
+        </div>
+      </section>
+
+      <p class="status" id="status" role="status" aria-live="polite">ORBIT · DRAG TO INSPECT</p>
+
+      <footer>
+        <span class="footer-hint">拖拽旋转 · 点击构件 · 滚轮缩放</span>
+        <span class="footer-keys">1–5 切换 · V 仰视 · E 展开 · R 重置</span>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      window.__CHINA_TOWERS_UI__ = {
+        setLoaderVisible(visible) {
+          const loader = document.getElementById('loader');
+          if (!loader) return;
+          loader.hidden = !visible;
+          loader.setAttribute('aria-hidden', String(!visible));
+        },
+        setLoaderProgress(ratio, statusText) {
+          const bar = document.getElementById('loader-bar');
+          const status = document.getElementById('loader-status');
+          if (bar) bar.style.width = `${Math.max(0, Math.min(100, (ratio || 0) * 100))}%`;
+          if (status && statusText) status.textContent = statusText;
+        },
+        setModelMeta(meta) {
+          const section = document.getElementById('model-meta');
+          if (!section || !meta) return;
+          section.hidden = false;
+          const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value ?? '—';
+          };
+          setText('meta-model-name', meta.modelName);
+          setText('meta-lod', meta.runtimeLod);
+          setText('meta-triangles', meta.renderTriangles != null ? String(meta.renderTriangles) : '—');
+          setText('meta-parts', meta.partCount != null ? String(meta.partCount) : '—');
+        }
+      };
+    </script>
+  </body>
+</html>

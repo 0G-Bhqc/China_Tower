@@ -1,0 +1,142 @@
+:root {
+  --accent: #d58b42;
+  --ink: #201a16;
+  --muted: #6c665d;
+  --paper: rgba(248, 247, 240, .92);
+  --line: rgba(53, 48, 42, .18);
+  color: var(--ink);
+  background: #dfe6e2;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+html, body, #scene { width: 100%; height: 100%; margin: 0; }
+body { overflow: hidden; background: #dfe6e2; }
+button { font: inherit; }
+#scene { display: block; touch-action: none; }
+.shell { position: fixed; inset: 0; pointer-events: none; }
+.loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(223, 230, 226, .95); z-index: 50; transition: opacity .35s ease; }
+.loader[hidden] { display: none; }
+.loader-inner { text-align: center; }
+.loader-brand { font-size: 46px; letter-spacing: .12em; }
+.loader-sub, .loader-status { margin-top: 8px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: #776653; }
+.loader-track { margin: 18px auto 0; width: 220px; height: 2px; background: rgba(55,45,36,.14); overflow: hidden; }
+.loader-bar { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+.intro { position: absolute; top: 54px; left: 6vw; max-width: 350px; }
+.eyebrow, .english, .location, .description, .status, footer, .pavilion-nav button, .controls button, .poetry-panel, .content-tabs, .panel-kicker, .poem-label, .poem-byline, .source-line, .meta-key, .meta-value { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.eyebrow { margin: 0 0 18px; color: #776653; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
+h1 { margin: 0; font-size: 76px; font-weight: 500; line-height: .9; letter-spacing: .06em; }
+.english { margin: 16px 0 0; font-size: 11px; font-weight: 800; letter-spacing: .2em; }
+.location { margin: 14px 0 0; color: color-mix(in srgb, var(--accent) 78%, #46392e); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+.description { margin: 14px 0 0; color: #62584e; font-size: 13px; line-height: 1.75; }
+.scene-reading { position: absolute; left: 6vw; bottom: 146px; width: min(410px, 38vw); padding: 14px 18px 15px 16px; border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(247,246,239,.72), rgba(247,246,239,.22)); backdrop-filter: blur(5px); pointer-events: auto; z-index: 4; }
+.scene-reading-kicker { margin: 0 0 7px; color: var(--accent); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.scene-reading-anchor { margin: 0 0 5px; color: #776653; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
+.scene-reading h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.25; }
+.scene-reading-line { margin: 6px 0 0; color: #3b2e25; font-size: 17px; line-height: 1.65; }
+.scene-reading-observation { margin: 7px 0 0; max-width: 350px; color: #665b50; font-size: 12px; line-height: 1.7; }
+.scene-cue-buttons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 15px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; text-shadow: none; }
+.scene-cue-buttons button { border: 1px solid rgba(65,53,42,.2); padding: 6px 9px; background: rgba(247,246,239,.52); color: #756858; cursor: pointer; font-size: 10px; transition: .2s ease; }
+.scene-cue-buttons button:hover, .scene-cue-buttons button.is-active { border-color: var(--accent); background: rgba(255,254,248,.86); color: #34271d; }
+.scene-reading-card { margin: -2px 0 20px; padding: 12px 13px 14px; background: rgba(227, 223, 207, .44); border: 1px solid rgba(61,53,44,.12); }
+.scene-reading-card blockquote { margin: 0; padding-left: 11px; border-left: 2px solid var(--accent); color: #3e342b; font-size: 16px; line-height: 1.8; }
+.scene-reading-panel-note { margin: 8px 0 0; color: #62584e; font-size: 12px; line-height: 1.75; }
+.scene-provenance { margin: 12px 0 18px; color: #897b6c; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; line-height: 1.6; letter-spacing: .02em; }
+.pavilion-nav { position: absolute; top: 54px; right: 418px; width: 184px; display: grid; gap: 5px; pointer-events: auto; }
+.pavilion-nav button { display: flex; gap: 12px; align-items: center; border: 0; border-left: 2px solid rgba(55,45,36,.17); padding: 10px 11px; background: rgba(242,243,237,.38); color: #62584d; text-align: left; cursor: pointer; font-size: 12px; transition: .2s ease; }
+.pavilion-nav button b { color: #998a78; font-size: 9px; letter-spacing: .12em; }
+.pavilion-nav button:hover, .pavilion-nav button.is-active { border-left-color: var(--accent); background: rgba(255,255,251,.82); color: var(--ink); transform: translateX(-3px); }
+.pavilion-nav button.is-active b { color: var(--accent); }
+.controls { position: absolute; left: 6vw; bottom: 56px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: auto; max-width: 520px; }
+.controls button { border: 1px solid rgba(65,53,42,.25); background: rgba(247,246,239,.76); color: #3d332a; padding: 10px 13px; cursor: pointer; font-size: 11px; letter-spacing: .04em; transition: .2s ease; }
+.controls button:first-child { border-color: var(--accent); color: #342216; }
+.controls button:hover { background: #fffef8; transform: translateY(-2px); }
+.model-meta { position: absolute; right: 418px; bottom: 84px; display: grid; gap: 6px; pointer-events: none; padding: 10px 12px; background: rgba(242,243,237,.58); border: 1px solid var(--line); }
+.meta-row { display: flex; gap: 10px; align-items: baseline; }
+.meta-key { font-size: 9px; font-weight: 800; letter-spacing: .16em; color: #776653; min-width: 50px; }
+.meta-value { font-size: 11px; font-weight: 700; color: #3d332a; }
+.status { position: absolute; right: 418px; bottom: 56px; margin: 0; color: #776653; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
+footer { position: absolute; right: 418px; bottom: 26px; color: #877967; font-size: 10px; letter-spacing: .05em; display: flex; gap: 14px; }
+.poetry-panel { position: absolute; top: 24px; right: 24px; bottom: 24px; width: 370px; display: flex; flex-direction: column; pointer-events: auto; background: var(--paper); border: 1px solid rgba(61,53,44,.2); box-shadow: 0 18px 50px rgba(53,48,42,.16); backdrop-filter: blur(10px); transition: transform .28s ease, opacity .28s ease; z-index: 10; }
+.poetry-panel:not(.is-open) { transform: translateX(calc(100% + 28px)); opacity: 0; pointer-events: none; }
+.poetry-panel-head { display: flex; justify-content: space-between; gap: 16px; padding: 22px 22px 16px; border-bottom: 1px solid var(--line); }
+.panel-kicker { margin: 0 0 7px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.poetry-panel h2 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.3; }
+.icon-button { width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font-family: Inter, sans-serif; font-size: 20px; line-height: 1; }
+.icon-button:hover { color: var(--ink); border-color: var(--accent); }
+.content-tabs { display: flex; gap: 4px; padding: 12px 22px 10px; border-bottom: 1px solid var(--line); }
+.content-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 6px 2px; margin-right: 14px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
+.content-tabs button.is-active { border-bottom-color: var(--accent); color: var(--ink); font-weight: 800; }
+.poetry-panel-body { overflow: auto; padding: 18px 22px 26px; }
+.poem-entry + .poem-entry { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.poem-label { margin-bottom: 8px; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.poem-entry h3, .content-section h3, .part-group h3 { margin: 0; font-size: 18px; font-weight: 600; }
+.poem-byline { margin: 6px 0 14px; color: var(--muted); font-size: 10px; letter-spacing: .05em; }
+.poem-entry blockquote { margin: 0 0 14px; padding-left: 13px; border-left: 2px solid var(--accent); color: #3e342b; font-size: 15px; line-height: 2; }
+.poem-gloss, .content-section p, .part-group p { margin: 10px 0 0; color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 13px; line-height: 1.85; }
+details { margin-top: 14px; border-top: 1px solid rgba(61,53,44,.12); }
+summary { padding-top: 11px; cursor: pointer; color: #4b4036; font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; }
+details p { color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 12px; line-height: 1.8; }
+.source-line { color: #8b7b6a !important; font-size: 10px !important; }
+.content-section > h3 { margin-top: 22px; }
+.content-lead { color: #3f332a !important; font-size: 15px !important; }
+.source-list { margin: 10px 0 0; padding-left: 18px; color: #766a5d; font-family: Inter, sans-serif; font-size: 11px; line-height: 1.8; }
+.part-group { padding: 12px 0; border-bottom: 1px solid rgba(61,53,44,.1); }
+.part-group h3 { font-family: Inter, sans-serif; font-size: 12px; }
+.empty-content { color: var(--muted); font-size: 13px; line-height: 1.8; }
+@media (max-width: 980px) {
+  .poetry-panel { width: 340px; }
+  .pavilion-nav { right: 366px; }
+  .status, footer { right: 366px; }
+}
+@media (max-width: 700px) {
+  .intro { top: 24px; left: 20px; max-width: 250px; }
+  h1 { font-size: 52px; }
+  .description { max-width: 230px; font-size: 11px; }
+  .scene-reading { left: 18px; right: 18px; bottom: 82px; width: auto; max-width: none; padding: 10px 12px 11px; background: linear-gradient(90deg, rgba(247,246,239,.8), rgba(247,246,239,.32)); }
+  .scene-reading h2 { font-size: 22px; }
+  .scene-reading-line { font-size: 15px; }
+  .scene-reading-observation { max-width: 280px; font-size: 11px; }
+  .scene-reading-anchor { font-size: 8px; }
+  .scene-cue-buttons { max-width: 330px; margin-top: 9px; }
+  .scene-cue-buttons button { padding: 5px 7px; font-size: 9px; }
+  .pavilion-nav { top: 166px; right: 16px; bottom: auto; width: 142px; gap: 3px; z-index: 12; }
+  .pavilion-nav button { padding: 7px 8px; font-size: 10px; background: rgba(243,244,238,.62); }
+  .controls { left: 18px; right: 18px; bottom: 18px; max-width: none; gap: 5px; }
+  .controls button { padding: 8px 9px; font-size: 10px; }
+  .model-meta, .status, footer { display: none; }
+  .poetry-panel { top: auto; right: 0; bottom: 0; width: 100%; max-height: 72vh; border-right: 0; border-bottom: 0; transform: translateY(0); }
+  .poetry-panel:not(.is-open) { transform: translateY(calc(100% + 18px)); }
+  .poetry-panel-head { padding: 16px 18px 12px; }
+  .poetry-panel h2 { font-size: 18px; }
+  .content-tabs { padding-left: 18px; }
+  .poetry-panel-body { padding: 15px 18px 24px; }
+}
+
+/* ThreeUI-inspired native HUD: compact pills, soft glass surfaces, and a
+   deliberate reading hierarchy without introducing a second UI framework. */
+.intro-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .12em; color: #756b60; }
+.intro-meta span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid rgba(65,53,42,.16); border-radius: 999px; background: rgba(247,246,239,.44); backdrop-filter: blur(8px); }
+.intro-meta-live { color: #4f604d !important; }
+.intro-meta-live i { width: 6px; height: 6px; border-radius: 50%; background: #6e9a68; box-shadow: 0 0 0 3px rgba(110,154,104,.14); }
+.scene-reading { border-radius: 0 18px 18px 0; box-shadow: 0 14px 32px rgba(53,48,42,.08); }
+.scene-cue-buttons button, .content-tabs button { border-radius: 999px; }
+.pavilion-nav { padding: 7px; border: 1px solid rgba(65,53,42,.13); border-radius: 18px; background: rgba(242,243,237,.34); box-shadow: 0 12px 32px rgba(53,48,42,.08); backdrop-filter: blur(10px); }
+.pavilion-nav button { border-radius: 11px; }
+.controls { align-items: center; padding: 7px; border: 1px solid rgba(65,53,42,.13); border-radius: 18px; background: rgba(242,243,237,.4); box-shadow: 0 12px 32px rgba(53,48,42,.08); backdrop-filter: blur(10px); }
+.controls button { border-radius: 999px; }
+.controls button.control-primary { border-color: var(--accent); background: rgba(255,250,235,.9); color: #342216; box-shadow: 0 5px 14px rgba(170,112,49,.13); }
+.poetry-panel { border-radius: 24px; overflow: hidden; box-shadow: 0 22px 64px rgba(53,48,42,.2); }
+.poetry-panel-head { padding-top: 24px; }
+.content-tabs { background: rgba(238,237,228,.42); }
+.content-tabs button { padding: 7px 11px; margin-right: 0; }
+.content-tabs button.is-active { background: rgba(255,254,248,.86); }
+.model-meta { border-radius: 15px; backdrop-filter: blur(8px); }
+@media (max-width: 700px) {
+  .intro-meta { margin-top: 12px; font-size: 8px; }
+  .intro-meta span { padding: 5px 7px; }
+  .pavilion-nav { padding: 5px; border-radius: 15px; }
+  .controls { padding: 5px; border-radius: 15px; }
+  .controls button { padding: 8px 10px; }
+  .scene-reading { border-radius: 0 15px 15px 0; }
+}

@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Large immutable evidence & DCC sources (kept on disk, never committed)
+evidence/
+backup/
+3D资产/
+*.zip
+
+# Large runtime GLB packages (canonical copies live under evidence/ with frozen SHA-256)
+public/assets/**/*.glb
+public/assets/feiyun-runtime/
+public/assets/tengwang-high-precision/
+public/assets/scene-pack/
+
+# Editor / temp backups
+*.bak.*
+*.tmp
+
+# Python cache (pipeline tooling)
+__pycache__/
+*.pyc
