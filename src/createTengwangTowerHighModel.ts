@@ -97,13 +97,14 @@ function calibratedMaterial(source: THREE.Material): THREE.Material {
   return clone;
 }
 
-// The exported high-precision GLB carries the source .max site ground plane
-// (a 2-triangle ~305x250 flat sheet). It extends far beyond the exhibit ground
-// circle, inflates every span-derived camera/explode/shadow computation, and
-// covers the app ground with an untextured sheet. The pavilion complex itself
-// spans roughly 30x20, so anything with a footprint beyond this threshold is
-// site scenery, not architecture.
-const MAX_IN_AREA_FOOTPRINT = 60;
+// The exported high-precision GLB carries one source-scene backdrop sheet
+// (a 2-triangle ~1745x1431 flat plane). It dwarfs the whole complex, inflates
+// every span-derived camera/explode/shadow computation, and covers the app
+// ground with an untextured sheet. Everything else — including the wide
+// multi-layer podium slabs (~170 units across) — is native architecture and
+// must stay, so this threshold sits between the backdrop (>1700) and the
+// largest legitimate structure (~174).
+const MAX_IN_AREA_FOOTPRINT = 200;
 
 function removeOutOfAreaGeometry(assembly: THREE.Object3D): number {
   assembly.updateMatrixWorld(true);

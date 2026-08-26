@@ -179,10 +179,11 @@ function frameModel(view = activeView) {
   const bounds = new THREE.Box3().setFromObject(activeModel);
   // Loaders that carry a large site (e.g. the Penglai walled courtyard) expose
   // a focus box around the main building; frame the camera on that so the
-  // pavilion stays inspectable while the courtyard extends around it.
-  const focusBounds = activeModel.userData.focusBounds instanceof THREE.Box3
-    ? activeModel.userData.focusBounds
-    : bounds;
+  // pavilion stays inspectable while the courtyard extends around it. Tengwang
+  // frames on its full bounds: its out-of-area site junk is removed at load,
+  // and the podium+tower composition needs the whole footprint in frame.
+  const useFocusBox = activeSpec.id !== 'tengwang' && activeModel.userData.focusBounds instanceof THREE.Box3;
+  const focusBounds = useFocusBox ? activeModel.userData.focusBounds : bounds;
   const centre = focusBounds.getCenter(new THREE.Vector3());
   const size = focusBounds.getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.y, size.z);
@@ -190,7 +191,7 @@ function frameModel(view = activeView) {
   cameraGroundY = Math.max(ground.position.y, bounds.min.y);
   cameraClearance = Math.max(0.2, Math.min(0.6, span * 0.012));
   const distanceMultiplier = activeSpec.id === 'tengwang'
-    ? (window.innerWidth < 720 ? 1.0 : 1.2)
+    ? (window.innerWidth < 720 ? 1.15 : 1.45)
     : (window.innerWidth < 720 ? 1.96 : 1.62);
   const distance = Math.max(span * distanceMultiplier, 12);
   const reviewDirections: Record<string, THREE.Vector3> = {
@@ -214,8 +215,11 @@ function frameModel(view = activeView) {
     camera.position.copy(centre).addScaledVector(reviewDirection.normalize(), distance);
     controls.target.copy(centre).add(new THREE.Vector3(0, size.y * 0.06, 0));
   } else {
+    // The tengwang podium is wide and low relative to the tower, so the
+    // default target needs more lift to keep the roof crown in frame.
+    const targetLift = activeSpec.id === 'tengwang' ? 0.16 : 0.06;
     camera.position.set(centre.x + distance * 0.82, centre.y + distance * 0.54, centre.z + distance * 0.82);
-    controls.target.copy(centre).add(new THREE.Vector3(0, size.y * 0.06, 0));
+    controls.target.copy(centre).add(new THREE.Vector3(0, size.y * targetLift, 0));
   }
   camera.near = view === 'low-angle'
     ? THREE.MathUtils.clamp(span / 500, 0.03, 0.12)

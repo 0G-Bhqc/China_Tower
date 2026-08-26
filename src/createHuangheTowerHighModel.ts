@@ -9,7 +9,10 @@ const HUANGHE_LODS: Record<RuntimeLod, string> = {
   lod1: '/assets/huanghe-main-tower-lod1.glb',
   lod2: '/assets/huanghe-main-tower-lod2.glb',
 };
-const HUANGHE_SEMANTIC_GLB = HUANGHE_LODS.lod1;
+// Load order: complete high-precision master first, then the decimated
+// desktop LOD as a fetch/parse fallback.
+const HUANGHE_PRIMARY_GLB = HUANGHE_LODS.lod0;
+const HUANGHE_FALLBACK_GLB = HUANGHE_LODS.lod1;
 
 function calibratedMaterial(source: THREE.Material): THREE.Material {
   const clone = source.clone();
@@ -66,31 +69,33 @@ export function createHuangheTowerHighModel(loadOptions: PavilionModelLoadOption
   const fallbackSpec = PAVILION_SPECS.find((spec) => spec.id === 'huanghe');
   root.userData.sculptRuntime = { nodes: { root }, meshes: {}, sockets: {}, colliders: {}, destructionGroups: { tower: [] } };
 
-  void loadVerifiedGlb(HUANGHE_SEMANTIC_GLB, loadOptions)
+  void loadVerifiedGlb(HUANGHE_PRIMARY_GLB, loadOptions)
     .then((gltf) => {
-      console.log('[Huanghe] Semantic GLB loaded', gltf.scene, 'children:', gltf.scene.children.length);
+      console.log('[Huanghe] High-precision GLB loaded', gltf.scene, 'children:', gltf.scene.children.length);
       const assembly = gltf.scene;
       assembly.name = 'huanghe-highmodel-complete-tower';
+      root.userData.runtimeLod = 'lod0';
       prepareHighModel(assembly);
       registerPavilionAssembly(root, assembly, 'huanghe');
       root.add(assembly);
       root.userData.highModelReady = true;
-      root.userData.highModelSource = 'semantic-hierarchy';
+      root.userData.highModelSource = 'high-precision';
       console.log('[Huanghe] Model ready, added to root');
       window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'huanghe' }));
     })
-    .catch((semanticError: unknown) => {
-      if (isAbortError(semanticError)) return;
-      console.warn('Huanghe semantic GLB failed to load, falling back to LOD0.', semanticError);
-      return loadVerifiedGlb(HUANGHE_LODS.lod0, loadOptions).then((gltf) => {
+    .catch((primaryError: unknown) => {
+      if (isAbortError(primaryError)) return;
+      console.warn('Huanghe high-precision GLB failed to load, falling back to LOD1.', primaryError);
+      return loadVerifiedGlb(HUANGHE_FALLBACK_GLB, loadOptions).then((gltf) => {
         const assembly = gltf.scene;
         assembly.name = 'huanghe-highmodel-complete-tower';
+        root.userData.runtimeLod = 'lod1';
         prepareHighModel(assembly);
         registerPavilionAssembly(root, assembly, 'huanghe');
         root.add(assembly);
         root.userData.highModelReady = true;
-        root.userData.highModelSource = 'lod0-fallback';
-        console.log('[Huanghe] LOD0 fallback ready');
+        root.userData.highModelSource = 'lod1-fallback';
+        console.log('[Huanghe] LOD1 fallback ready');
         window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'huanghe' }));
       });
     })
