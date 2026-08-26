@@ -107,10 +107,18 @@ function tileRidgeFactor(
 /**
  * Recolour every face of the mesh via vertex colours and swap in a
  * vertex-colour material.  Returns true when the mesh was recoloured.
+ *
+ * `options.upwardZone` controls how upward faces are zoned:
+ *   - 'auto' (default): upward faces below 42% of the mesh's own height are
+ *     treated as stone.  Correct for meshes that mix roofs and stone.
+ *   - 'roof': every upward face is roof.  Required when one mesh spans the
+ *     whole tower (e.g. the Huanghe #25 roof mesh): the in-mesh height gate
+ *     would otherwise misclassify the lower roof tiers as stone.
  */
 export function recolorMeshSurfaces(
   mesh: THREE.Mesh,
   palette: SemanticPalette = DEFAULT_SEMANTIC_PALETTE,
+  options: { upwardZone?: 'auto' | 'roof' } = {},
 ): boolean {
   const geometry = mesh.geometry;
   const position = geometry.getAttribute('position');
@@ -168,7 +176,7 @@ export function recolorMeshSurfaces(
 
     let zone: keyof typeof zoneColors;
     if (_n.y > 0.55) {
-      zone = heightNorm > 0.42 ? 'roof' : 'stone';
+      zone = options.upwardZone === 'roof' || heightNorm > 0.42 ? 'roof' : 'stone';
     } else if (_n.y < -0.5) {
       zone = 'timber';
     } else if (heightNorm > 0.55) {

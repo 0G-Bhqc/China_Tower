@@ -200,11 +200,12 @@ function prepareHighModel(assembly: THREE.Group): void {
       const matchedLayer = foundationLayers.find((layer) => Math.abs(layer.minY - geometryBox.min.y) < LAYER_THRESHOLD * 2);
       const layerIndex = matchedLayer ? matchedLayer.layerIndex : 0;
       const layerEscalation = layerIndex * 3;
-      const yNudge = matchedLayer ? matchedLayer.yNudge : 0;
 
-      // Physically nudge the mesh upward to separate co-planar layers.
-      // This is the single most effective anti-z-fighting measure.
-      object.position.y += yNudge;
+      // NOTE: no physical Y displacement here. An earlier revision nudged
+      // foundation-band meshes upward per layer to fight z-fighting, but with
+      // the full podium restored the band count exploded and the differential
+      // nudges visibly tore stairs, railings, and the tower base away from
+      // their supports. Native alignment wins; polygonOffset below is enough.
 
       effectiveMaterials.forEach((material) => {
         material.polygonOffset = true;

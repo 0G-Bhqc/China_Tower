@@ -70,7 +70,10 @@ function prepareHighModel(assembly: THREE.Group): void {
     // of showing blank clay.
     const effective = Array.isArray(object.material) ? object.material[0] : object.material;
     if (needsSemanticRecolor(effective)) {
-      recolorMeshSurfaces(object, HUANGHE_SEMANTIC_PALETTE);
+      // The roof mesh (#25) spans the whole tower, so the in-mesh height gate
+      // would zone its lower tiers as stone. Every upward face in this asset's
+      // placeholder geometry is roof; stone lives in separate meshes.
+      recolorMeshSurfaces(object, HUANGHE_SEMANTIC_PALETTE, { upwardZone: 'roof' });
     }
     object.castShadow = true;
     object.receiveShadow = true;
