@@ -124,7 +124,10 @@ const ground = new THREE.Mesh(
 );
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.05; // Sink 5 cm so the ground never coincides with pavilion base slabs
-ground.receiveShadow = false;
+// Receive shadows: without a contact shadow every pavilion reads as floating
+// in the air. The positive polygonOffset below only biases depth ordering;
+// shadow reception is unaffected by it.
+ground.receiveShadow = true;
 // Extreme positive polygonOffset guarantees the ground renders strictly behind
 // any pavilion foundation geometry, even when that geometry also applies its
 // own (negative) polygonOffset.  Combined with the 5 cm y-sink, z-fighting
