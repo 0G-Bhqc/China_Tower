@@ -97,7 +97,38 @@ function calibratedMaterial(source: THREE.Material): THREE.Material {
   return clone;
 }
 
+// The exported high-precision GLB carries the source .max site ground plane
+// (a 2-triangle ~305x250 flat sheet). It extends far beyond the exhibit ground
+// circle, inflates every span-derived camera/explode/shadow computation, and
+// covers the app ground with an untextured sheet. The pavilion complex itself
+// spans roughly 30x20, so anything with a footprint beyond this threshold is
+// site scenery, not architecture.
+const MAX_IN_AREA_FOOTPRINT = 60;
+
+function removeOutOfAreaGeometry(assembly: THREE.Object3D): number {
+  assembly.updateMatrixWorld(true);
+  const removals: Array<{ mesh: THREE.Mesh; parent: THREE.Object3D }> = [];
+  assembly.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const bounds = new THREE.Box3().setFromObject(object);
+    if (bounds.isEmpty()) return;
+    const size = bounds.getSize(new THREE.Vector3());
+    if (Math.max(size.x, size.z) > MAX_IN_AREA_FOOTPRINT) {
+      removals.push({ mesh: object, parent: object.parent ?? assembly });
+    }
+  });
+  for (const { mesh, parent } of removals) {
+    parent.remove(mesh);
+    mesh.geometry.dispose();
+  }
+  if (removals.length > 0) {
+    console.info(`[Tengwang] Removed ${removals.length} out-of-area source-scene mesh(es) (footprint > ${MAX_IN_AREA_FOOTPRINT}).`);
+  }
+  return removals.length;
+}
+
 function prepareHighModel(assembly: THREE.Group): void {
+  removeOutOfAreaGeometry(assembly);
   const materials = new Map<string, THREE.Material>();
   let meshIndex = 0;
   const rawBounds = new THREE.Box3().setFromObject(assembly);
@@ -280,12 +311,6 @@ function prepareHighModel(assembly: THREE.Group): void {
   const finalBounds = new THREE.Box3().setFromObject(assembly);
   const finalCentre = finalBounds.getCenter(new THREE.Vector3());
   console.log('[Tengwang] final bounds:', finalBounds.min.toString(), '->', finalBounds.max.toString(), 'centre:', finalCentre.toString());
-
-  // DEBUG: force assembly to root origin so camera framing cannot drift.
-  // Because the assembly is now at (0,0,0), the local scaled focus equals world focus.
-  assembly.position.set(0, 0, 0);
-  console.log('[Tengwang] forced assembly pos:', assembly.position.toString());
-  assembly.userData.focusBounds = scaledFocus.clone();
 
   // Check mesh visibility before adding to root
   let visibleMeshCount = 0;
