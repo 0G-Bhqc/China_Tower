@@ -321,12 +321,8 @@ function updateCopy(spec: PavilionSpec) {
 
 async function loadPavilionFactory(spec: PavilionSpec): Promise<PavilionFactory> {
   if (spec.id === 'yueyang') {
-    const module = await import('./createYueyangTowerFormModel');
-    return (loadOptions) => {
-      const authored = module.createYueyangTowerModel({ castShadow: true, receiveShadow: true, qualityPriority: 'balanced', loadOptions });
-      authored.name = 'yueyang-authored-form-refinement';
-      return authored;
-    };
+    const module = await import('./createYueyangTowerNativeModel');
+    return module.createYueyangTowerNativeModel;
   }
   if (spec.id === 'tengwang') {
     const module = await import('./createTengwangTowerHighModel');
