@@ -91,7 +91,7 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     cloudColor: '#fdf5e6',
     sunDisk: { size: 130, color: '#fff3cf', intensity: 2.8 },
     // 展示用日轮比主光略低 (34°), 默认取景抬头即可见; 主光仍保持高角度短影。
-    diskDirection: [0.55, 0.42, 0.3],
+    diskDirection: [0.55, 0.26, 0.3],
     // Frames the HDRI's own 长江大桥 across the background; rotation 0 left
     // blurry riverbank foliage hanging over the water like curtains.
     backgroundIntensity: 1.0,
@@ -110,7 +110,7 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunColor: '#ffbe82', sunIntensity: 2.3,
     cloudColor: '#f2c4a2',
     // 正赤如丹: a large vermilion disc flattened onto the water-sky junction.
-    sunDisk: { size: 300, color: '#f04a14', intensity: 5.2 },
+    sunDisk: { size: 380, color: '#f04a14', intensity: 6.8 },
     diskDirection: [-0.85, 0.024, -0.35],
     backgroundIntensity: 1.0,
     backgroundRotationY: 0,
@@ -472,6 +472,7 @@ function createTree(
   name: string,
   position: [number, number, number],
   scale: number,
+  crown: 'broad' | 'narrow' = 'broad',
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = name;
@@ -551,18 +552,29 @@ function createTree(
     group.add(blob);
     // Leaf-cluster cards hug the blob's surface as foliage texture — detail
     // on a solid volume, never a floating billboard.
-    for (let card = 0; card < 3; card += 1) {
+    // 中式层叠冠盘: 水平叶盘自下而上收分, 底宽上窄如整形的园柏。
+    const layerCount = crown === 'narrow' ? 5 : 4;
+    for (let layer = 0; layer < layerCount; layer += 1) {
+      const t = layer / (layerCount - 1);
+      const layerY = centre.y - radius * 0.35 + (1 - t) * radius * 1.15;
+      const layerRadius = radius * (crown === 'narrow' ? 0.85 - t * 0.55 : 1.15 - t * 0.7);
+      const disc = new THREE.Mesh(cardGeometry, layer % 2 === 0 ? canopyMaterial : canopyShadeMaterial);
+      disc.rotation.x = -Math.PI / 2;
+      disc.rotation.z = hashNoise(puff * 3.3 + layer, position[0]) * Math.PI;
+      disc.scale.set(layerRadius * 1.42, layerRadius * 1.06, 1);
+      disc.position.set(centre.x, layerY, centre.z);
+      disc.castShadow = true;
+      disc.customDepthMaterial = canopyDepthMaterial;
+      group.add(disc);
+    }
+    // 交叉竖卡补侧影, 平视时冠体也有叶量。
+    for (let card = 0; card < 2; card += 1) {
       const cardAngle = hashNoise(puff * 7.7 + card, position[2]) * Math.PI * 2;
-      const cardTilt = 0.45 + hashNoise(card, puff) * 0.9;
-      const cardDistance = radius * 0.55;
       const leaf = new THREE.Mesh(cardGeometry, card % 2 === 0 ? canopyMaterial : canopyShadeMaterial);
-      leaf.position.set(
-        centre.x + Math.cos(cardAngle) * Math.cos(cardTilt) * cardDistance,
-        centre.y + Math.sin(cardTilt) * cardDistance * 0.85 + radius * 0.15,
-        centre.z + Math.sin(cardAngle) * Math.cos(cardTilt) * cardDistance,
-      );
+      leaf.position.set(centre.x + Math.cos(cardAngle) * radius * 0.3, centre.y + radius * 0.1, centre.z + Math.sin(cardAngle) * radius * 0.3);
       leaf.rotation.y = cardAngle + hashNoise(card, puff) * 1.4;
-      leaf.rotation.x = cardTilt * 0.45 - 0.18;
+      leaf.rotation.x = (hashNoise(card, puff) - 0.5) * 0.5;
+      leaf.scale.setScalar(radius * 0.72);
       leaf.castShadow = true;
       leaf.customDepthMaterial = canopyDepthMaterial;
       group.add(leaf);
@@ -755,24 +767,28 @@ function createLantern(parent: THREE.Object3D, materials: THREE.Material[], name
 // Per-tower near-field layout: each plaza gets its own tree-ring rhythm,
 // scale range and lantern stations so the three scenes don't read as copies.
 const LANDSCAPE_LAYOUTS: Record<PavilionId, {
+  crown: 'broad' | 'narrow';
   treeAngles: number[];
   treeRadius: [number, number];
   treeScale: [number, number];
   lanterns: Array<[number, number]>;
 }> = {
   yueyang: {
+    crown: 'broad',
     treeAngles: [75, 105, 138, 168, 200, 232, 262, 292, 322, 352],
     treeRadius: [14, 24],
     treeScale: [0.85, 1.35],
     lanterns: [[-8.4, 8.4], [8.4, 8.4], [-19, -19], [19, -19], [-22, 3], [22, 3]],
   },
   huanghe: {
+    crown: 'narrow',
     treeAngles: [80, 110, 145, 175, 208, 238, 268, 300, 330, 8],
     treeRadius: [15, 25],
     treeScale: [0.95, 1.5],
     lanterns: [[-9.5, 7], [9.5, 7], [-17, -17], [17, -17], [-24, -4], [24, -4]],
   },
   tengwang: {
+    crown: 'broad',
     treeAngles: [8, 32, 62, 88, 116, 142, 168, 192, 344],
     treeRadius: [16, 26],
     treeScale: [0.9, 1.4],
@@ -813,7 +829,7 @@ function createLandscape(
     const treeScale = layout.treeScale[0] + hashNoise(index, 5) * (layout.treeScale[1] - layout.treeScale[0]);
     // Every third tree uses the shade material — mixed tonality across the ring.
     const treeCanopy = index % 3 === 2 ? canopyShade : canopy;
-    trees.push(createTree(near, treeCanopy, canopyShade, shared.canopyDepthMaterial, shared.trunk, `${id}-tree-${index}`, [Math.cos(angle) * radius, PLAZA_Y, Math.sin(angle) * radius], treeScale));
+    trees.push(createTree(near, treeCanopy, canopyShade, shared.canopyDepthMaterial, shared.trunk, `${id}-tree-${index}`, [Math.cos(angle) * radius, PLAZA_Y, Math.sin(angle) * radius], treeScale, layout.crown));
   });
 
   layout.lanterns.forEach(([lanternX, lanternZ], index) => {
@@ -875,14 +891,14 @@ function createBirdFlock(count: number, options: { solo?: boolean } = {}): BirdF
     if (solo) {
       // 孤鹜: 身躯 + 头颈 + 尾 + 分段双翼, 剪影在落霞前也读得出鸟形。
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), material);
-      body.scale.set(1.7 * s, 0.52 * s, 0.6 * s);
+      body.scale.set(2.05 * s, 0.42 * s, 0.5 * s);
       pivot.add(body);
       const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07 * s, 0.15 * s, 0.6 * s, 6), material);
       neck.position.set(0.9 * s, 0.3 * s, 0);
       neck.rotation.z = -0.75;
       pivot.add(neck);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19 * s, 8, 6), material);
-      head.position.set(1.14 * s, 0.52 * s, 0);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.16 * s, 8, 6), material);
+      head.position.set(1.34 * s, 0.56 * s, 0);
       pivot.add(head);
       const tail = new THREE.Mesh(new THREE.ConeGeometry(0.2 * s, 0.85 * s, 6), material);
       tail.position.set(-1.1 * s, 0.1 * s, 0);
@@ -923,8 +939,10 @@ function createBirdFlock(count: number, options: { solo?: boolean } = {}): BirdF
         group.rotation.y = Math.PI * 0.04;
       }
       for (const bird of birds) {
-        const flap = Math.sin(elapsed * flapSpeed + bird.phase);
-        const amp = solo ? 0.62 : 0.55;
+        // 扇展-滑翔节律: 振幅被慢周期包络调制, 峰值间翼面回到上扬滑翔位。
+        const envelope = solo ? Math.max(0.15, Math.sin(elapsed * 0.85 + bird.phase) ** 2) : 1;
+        const flap = Math.sin(elapsed * flapSpeed + bird.phase) * envelope + (solo ? 0.18 : 0);
+        const amp = solo ? 0.6 : 0.55;
         bird.right.rotation.x = -flap * amp;
         bird.left.rotation.x = flap * amp;
         bird.pivot.position.y = bird.pivot.userData.baseY ?? (bird.pivot.userData.baseY = bird.pivot.position.y);
@@ -1212,7 +1230,7 @@ export function createSceneEnvironment(
   const sunsetMaterial = new THREE.MeshBasicMaterial({
     map: cloudTexture,
     transparent: true,
-    opacity: 0.52,
+    opacity: 0.66,
     depthWrite: false,
     fog: true,
     side: THREE.DoubleSide,
@@ -1373,7 +1391,7 @@ export function createSceneEnvironment(
     const streakAzimuth = Math.atan2(config.sunDirection[0], config.sunDirection[2]);
     sunStreak.rotation.y = streakAzimuth + Math.PI;
     sunStreak.position.set(Math.sin(streakAzimuth) * 344, WATER_Y + 0.05, Math.cos(streakAzimuth) * 344);
-    streakBaseOpacity = THREE.MathUtils.clamp(config.sunDisk.intensity * 0.15, 0.3, 0.75);
+    streakBaseOpacity = THREE.MathUtils.clamp(config.sunDisk.intensity * 0.15, 0.3, 0.85);
     sunStreakMaterial.color.set(config.sunDisk.color).lerp(new THREE.Color(1, 1, 1), 0.3);
     sunStreakMaterial.opacity = streakBaseOpacity;
     sunStreakInnerMaterial.color.set(config.sunDisk.color).lerp(new THREE.Color(1, 1, 1), 0.55);
