@@ -4,6 +4,7 @@ import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
 import { applySemanticRelief } from './runtime/semanticRelief';
+import { mergeAssemblyByMaterial } from './runtime/mergeAssemblyByMaterial';
 
 const YUEYANG_LODS: Record<RuntimeLod, string> = {
   lod0: '/assets/yueyang-architectural-lod.glb',
@@ -96,6 +97,9 @@ function prepareHighModel(assembly: THREE.Group): void {
   assembly.position.z -= centre.z;
   assembly.position.y -= bounds.min.y;
   assembly.updateMatrixWorld(true);
+  // 材质合并: 把数百个网格并成按材质分组的构件, 压低 draw call 与遍历成本。
+  const mergedMeshes = mergeAssemblyByMaterial(assembly);
+  if (mergedMeshes < 40) console.info(`[Yueyang] merged to ${mergedMeshes} draw meshes`);
 }
 
 export function createYueyangTowerNativeModel(loadOptions: PavilionModelLoadOptions = {}): THREE.Group {

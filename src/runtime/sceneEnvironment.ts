@@ -89,7 +89,9 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunDirection: [0.55, 0.85, 0.3],
     sunColor: '#fff3da', sunIntensity: 2.6,
     cloudColor: '#fdf5e6',
-    sunDisk: { size: 110, color: '#fff7e0', intensity: 2.4 },
+    sunDisk: { size: 130, color: '#fff3cf', intensity: 2.8 },
+    // 展示用日轮比主光略低 (34°), 默认取景抬头即可见; 主光仍保持高角度短影。
+    diskDirection: [0.55, 0.42, 0.3],
     // Frames the HDRI's own 长江大桥 across the background; rotation 0 left
     // blurry riverbank foliage hanging over the water like curtains.
     backgroundIntensity: 1.0,

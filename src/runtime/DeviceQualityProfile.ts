@@ -41,8 +41,10 @@ export function detectDeviceQualityProfile(): DeviceQualityProfile {
   if (params.get('review') === '1') return PROFILES.hero;
   const navigatorInfo = navigator as NavigatorWithDeviceMemory;
   const narrowViewport = Math.min(window.innerWidth, window.innerHeight) < 720;
+  // deviceMemory 是最可靠的低配信号; CPU 核数只在极少 (≤2) 时才视为受限,
+  // 否则四核桌面会被误降档 (无 bloom、最小阴影图)。
   const constrainedMemory = typeof navigatorInfo.deviceMemory === 'number' && navigatorInfo.deviceMemory <= 4;
-  const constrainedCpu = typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
+  const constrainedCpu = typeof navigatorInfo.hardwareConcurrency === 'number' && navigatorInfo.hardwareConcurrency <= 2;
   if (narrowViewport || constrainedMemory || constrainedCpu) return PROFILES.mobile;
   return PROFILES.standard;
 }

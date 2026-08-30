@@ -260,15 +260,22 @@ function frameModel(view = activeView) {
     // The tengwang default frame swings ~24° around the tower so the
     // vermilion dusk disc (正赤如丹) clears the intro title and shares the
     // shot with the pavilion; other towers keep the classic 45° corner view.
-    const defaultAzimuth = activeSpec.id === 'tengwang' ? 1.22 : Math.PI * 0.25;
+    // 黄鹤楼同样向太阳方位偏转并抬头取景, 让白金日轮进入画面上缘。
+    const defaultAzimuth = activeSpec.id === 'tengwang'
+      ? 1.22
+      : activeSpec.id === 'huanghe'
+        ? 1.15
+        : Math.PI * 0.25;
+    const camHeight = activeSpec.id === 'huanghe' ? 0.6 : 0.34;
     camera.position.set(
       centre.x + Math.sin(defaultAzimuth) * distance * 1.16,
-      centre.y + distance * 0.34,
+      centre.y + distance * camHeight,
       centre.z + Math.cos(defaultAzimuth) * distance * 1.16,
     );
     // The tengwang podium is wide and low relative to the tower, so the
-    // default target needs more lift to keep the roof crown in frame.
-    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : 0.14;
+    // default target needs more lift to keep the roof crown in frame;
+    // huanghe raises the target further so the frame tilts into the sky.
+    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : activeSpec.id === 'huanghe' ? 0.46 : 0.14;
     controls.target.copy(centre).add(new THREE.Vector3(0, size.y * targetLift, 0));
   }
   camera.near = view === 'low-angle'
