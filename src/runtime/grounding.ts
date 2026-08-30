@@ -61,3 +61,38 @@ export function groundAssembly(assembly: THREE.Object3D, groundY = 0): THREE.Box
   assembly.updateMatrixWorld(true);
   return new THREE.Box3().setFromObject(assembly);
 }
+
+// Native site exports often carry below-grade extensions — retaining walls or
+// plinth masses sunk beneath the source-scene floor — that hang far beneath
+// the walkable base plane. Grounding on the raw minimum would hoist the whole
+// building into the air by that buried depth. Instead, ground on the
+// structural base: the first mesh band above a large vertical gap in the
+// per-mesh minimum-Y distribution, so isolated below-grade extensions stay
+// buried under the app ground while the architecture itself meets it.
+export function computeStructuralBaseY(root: THREE.Object3D): number {
+  root.updateMatrixWorld(true);
+  const minYs: number[] = [];
+  let maxY = -Infinity;
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || !object.visible) return;
+    const bounds = new THREE.Box3().setFromObject(object);
+    if (bounds.isEmpty()) return;
+    minYs.push(bounds.min.y);
+    maxY = Math.max(maxY, bounds.max.y);
+  });
+  if (minYs.length === 0) return 0;
+  minYs.sort((a, b) => a - b);
+  const height = Math.max(maxY - minYs[0], 0.001);
+  // A band counts as "buried outlier" only when the whole cluster below the
+  // gap is a small minority of meshes; a broad bottom cluster is the real
+  // base even if a gap follows it.
+  const clusterRatioThreshold = 0.05;
+  const gapThreshold = height * 0.05;
+  for (let i = 1; i < minYs.length; i++) {
+    if (minYs[i] - minYs[i - 1] > gapThreshold) {
+      if (i / minYs.length >= clusterRatioThreshold) break;
+      return minYs[i];
+    }
+  }
+  return minYs[0];
+}

@@ -1,19 +1,23 @@
 import * as THREE from 'three';
-import { PAVILION_SPECS } from './createPavilionGalleryModel';
 import { selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
 import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { needsSemanticRecolor, recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
+import { applySemanticRelief } from './runtime/semanticRelief';
 
 const HUANGHE_LODS: Record<RuntimeLod, string> = {
   lod0: '/assets/huanghe-main-tower-highmodel.glb',
   lod1: '/assets/huanghe-main-tower-lod1.glb',
   lod2: '/assets/huanghe-main-tower-lod2.glb',
 };
-// Load order: complete high-precision master first, then the decimated
-// desktop LOD as a fetch/parse fallback.
-const HUANGHE_PRIMARY_GLB = HUANGHE_LODS.lod0;
-const HUANGHE_FALLBACK_GLB = HUANGHE_LODS.lod1;
+
+// Degrade one LOD at a time from the tier's preferred asset so a failed fetch
+// never jumps straight back to the full master.
+const DEGRADE_ORDER: Record<RuntimeLod, RuntimeLod[]> = {
+  lod0: ['lod1', 'lod2'],
+  lod1: ['lod2', 'lod0'],
+  lod2: ['lod1', 'lod0'],
+};
 
 // Huanghe wears golden glazed tiles on vermilion timber over a stone podium.
 const HUANGHE_SEMANTIC_PALETTE: SemanticPalette = {
@@ -72,12 +76,26 @@ function prepareHighModel(assembly: THREE.Group): void {
     if (needsSemanticRecolor(effective)) {
       // The roof mesh (#25) spans the whole tower, so the in-mesh height gate
       // would zone its lower tiers as stone. Every upward face in this asset's
-      // placeholder geometry is roof; stone lives in separate meshes.
-      recolorMeshSurfaces(object, HUANGHE_SEMANTIC_PALETTE, { upwardZone: 'roof' });
+      // placeholder geometry is roof; stone lives in separate meshes. The
+      // steep slope band (0.18 < normal.y ≤ 0.55) must also zone as roof —
+      // on this mesh those faces are tile slopes, and leaving them under the
+      // vertical gate scattered plaster-pink patches through the golden
+      // tiers, which read as glitter at distance.
+      recolorMeshSurfaces(object, HUANGHE_SEMANTIC_PALETTE, { upwardZone: 'roof', slopeAsRoof: true, verticalZone: 'vermilion' });
+      // The exported placeholder layer (#25, 2M tris) is coplanar with the
+      // textured body mesh underneath across the whole tower. polygonOffset
+      // cannot separate them — the renderer runs a logarithmic depth buffer,
+      // which disables fixed-function depth offset — so the two layers
+      // stippled into coloured sparkle. Shrink the placeholder a fraction of
+      // a percent toward its origin instead: coplanar regions now sit a few
+      // mm BEHIND the textured body and lose the depth test cleanly, while
+      // eave tips and soffits outside the body footprint still render.
+      object.scale.multiplyScalar(0.9985);
     }
     object.castShadow = true;
     object.receiveShadow = true;
   });
+  applySemanticRelief(assembly);
   assembly.scale.setScalar(0.42);
   assembly.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(assembly);
@@ -91,49 +109,49 @@ function prepareHighModel(assembly: THREE.Group): void {
 export function createHuangheTowerHighModel(loadOptions: PavilionModelLoadOptions = {}): THREE.Group {
   const root = new THREE.Group();
   root.name = 'huanghe-highmodel-root';
-  console.log('[Huanghe] Creating high model root');
-  const runtimeLod = selectAvailableLod(HUANGHE_LODS);
-  root.userData.runtimeLod = runtimeLod;
-  const fallbackSpec = PAVILION_SPECS.find((spec) => spec.id === 'huanghe');
   root.userData.sculptRuntime = { nodes: { root }, meshes: {}, sockets: {}, colliders: {}, destructionGroups: { tower: [] } };
 
-  void loadVerifiedGlb(HUANGHE_PRIMARY_GLB, loadOptions)
-    .then((gltf) => {
-      console.log('[Huanghe] High-precision GLB loaded', gltf.scene, 'children:', gltf.scene.children.length);
-      const assembly = gltf.scene;
-      assembly.name = 'huanghe-highmodel-complete-tower';
-      root.userData.runtimeLod = 'lod0';
-      prepareHighModel(assembly);
-      registerPavilionAssembly(root, assembly, 'huanghe');
-      root.add(assembly);
-      root.userData.highModelReady = true;
-      root.userData.highModelSource = 'high-precision';
-      console.log('[Huanghe] Model ready, added to root');
-      window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'huanghe' }));
-    })
-    .catch((primaryError: unknown) => {
-      if (isAbortError(primaryError)) return;
-      console.warn('Huanghe high-precision GLB failed to load, falling back to LOD1.', primaryError);
-      return loadVerifiedGlb(HUANGHE_FALLBACK_GLB, loadOptions).then((gltf) => {
+  // Quality-tier asset selection: selectAvailableLod resolves the device
+  // profile (hero→lod0, standard→lod1, mobile→lod2, ?lod= override) and the
+  // chain degrades one LOD at a time from there.
+  const preferredLod = selectAvailableLod(HUANGHE_LODS);
+  root.userData.runtimeLod = preferredLod;
+  const stages = [
+    { url: HUANGHE_LODS[preferredLod], lod: preferredLod, source: preferredLod === 'lod0' ? 'high-precision' : `${preferredLod}-tier` },
+    ...DEGRADE_ORDER[preferredLod].map((lod) => ({ url: HUANGHE_LODS[lod], lod, source: `${lod}-fallback` })),
+  ];
+  let stageIndex = 0;
+
+  const loadStage = (): void => {
+    const stage = stages[stageIndex++];
+    loadVerifiedGlb(stage.url, loadOptions)
+      .then((gltf) => {
         const assembly = gltf.scene;
         assembly.name = 'huanghe-highmodel-complete-tower';
-        root.userData.runtimeLod = 'lod1';
+        root.userData.runtimeLod = stage.lod;
         prepareHighModel(assembly);
         registerPavilionAssembly(root, assembly, 'huanghe');
         root.add(assembly);
+        // No runtime plaque here: the GLB carries its own 黄鹤楼 board on the
+        // top storey — an added one doubled it in the wrong spot.
         root.userData.highModelReady = true;
-        root.userData.highModelSource = 'lod1-fallback';
-        console.log('[Huanghe] LOD1 fallback ready');
+        root.userData.highModelSource = stage.source;
         window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'huanghe' }));
+      })
+      .catch((error: unknown) => {
+        if (isAbortError(error)) return;
+        if (stageIndex < stages.length) {
+          console.warn(`Huanghe GLB ${stage.url} failed, degrading LOD.`, error);
+          loadStage();
+          return;
+        }
+        root.userData.highModelReady = false;
+        root.userData.highModelLoadError = true;
+        root.userData.highModelLoadErrorReason = 'asset-fetch-or-parse-failed';
+        window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'huanghe' }));
+        console.error('Huanghe runtime GLB failed to load.', error);
       });
-    })
-    .catch((error: unknown) => {
-      if (isAbortError(error)) return;
-      root.userData.highModelReady = false;
-      root.userData.highModelLoadError = true;
-      root.userData.highModelLoadErrorReason = 'asset-fetch-or-parse-failed';
-      window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'huanghe' }));
-      console.error('Huanghe runtime GLB failed to load.', error);
-    });
+  };
+  loadStage();
   return root;
 }

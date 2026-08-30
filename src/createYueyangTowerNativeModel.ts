@@ -3,16 +3,21 @@ import { selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProf
 import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
+import { applySemanticRelief } from './runtime/semanticRelief';
 
 const YUEYANG_LODS: Record<RuntimeLod, string> = {
   lod0: '/assets/yueyang-architectural-lod.glb',
   lod1: '/assets/yueyang-architectural-lod1.glb',
   lod2: '/assets/yueyang-architectural-lod2.glb',
 };
-// Load order: complete high-precision master first, then the decimated
-// desktop LOD as a fetch/parse fallback.
-const YUEYANG_PRIMARY_GLB = YUEYANG_LODS.lod0;
-const YUEYANG_FALLBACK_GLB = YUEYANG_LODS.lod1;
+
+// Degrade one LOD at a time from the tier's preferred asset so a failed fetch
+// never jumps straight back to the full master.
+const DEGRADE_ORDER: Record<RuntimeLod, RuntimeLod[]> = {
+  lod0: ['lod1', 'lod2'],
+  lod1: ['lod2', 'lod0'],
+  lod2: ['lod1', 'lod0'],
+};
 
 // Yueyang wears a golden glazed helmet roof over vermilion timber on a stone
 // city-platform (roof tone follows the authored model's roofColor 0xc88738).
@@ -81,6 +86,7 @@ function prepareHighModel(assembly: THREE.Group): void {
     object.castShadow = true;
     object.receiveShadow = true;
   });
+  applySemanticRelief(assembly);
   // The native asset is already at exhibit scale (~18x21x19); centre it on
   // the gallery ground plane and ground it without rescaling.
   assembly.updateMatrixWorld(true);
@@ -95,44 +101,49 @@ function prepareHighModel(assembly: THREE.Group): void {
 export function createYueyangTowerNativeModel(loadOptions: PavilionModelLoadOptions = {}): THREE.Group {
   const root = new THREE.Group();
   root.name = 'yueyang-highmodel-root';
-  const runtimeLod = selectAvailableLod(YUEYANG_LODS);
-  root.userData.runtimeLod = runtimeLod;
   root.userData.sculptRuntime = { nodes: { root }, meshes: {}, sockets: {}, colliders: {}, destructionGroups: { tower: [] } };
 
-  void loadVerifiedGlb(YUEYANG_PRIMARY_GLB, loadOptions)
-    .then((gltf) => {
-      const assembly = gltf.scene;
-      assembly.name = 'yueyang-highmodel-complete-tower';
-      root.userData.runtimeLod = 'lod0';
-      prepareHighModel(assembly);
-      registerPavilionAssembly(root, assembly, 'yueyang');
-      root.add(assembly);
-      root.userData.highModelReady = true;
-      root.userData.highModelSource = 'high-precision';
-      window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'yueyang' }));
-    })
-    .catch((primaryError: unknown) => {
-      if (isAbortError(primaryError)) return;
-      console.warn('Yueyang high-precision GLB failed to load, falling back to LOD1.', primaryError);
-      return loadVerifiedGlb(YUEYANG_FALLBACK_GLB, loadOptions).then((gltf) => {
+  // Quality-tier asset selection: selectAvailableLod resolves the device
+  // profile (hero→lod0, standard→lod1, mobile→lod2, ?lod= override) and the
+  // chain degrades one LOD at a time from there.
+  const preferredLod = selectAvailableLod(YUEYANG_LODS);
+  root.userData.runtimeLod = preferredLod;
+  const stages = [
+    { url: YUEYANG_LODS[preferredLod], lod: preferredLod, source: preferredLod === 'lod0' ? 'high-precision' : `${preferredLod}-tier` },
+    ...DEGRADE_ORDER[preferredLod].map((lod) => ({ url: YUEYANG_LODS[lod], lod, source: `${lod}-fallback` })),
+  ];
+  let stageIndex = 0;
+
+  const loadStage = (): void => {
+    const stage = stages[stageIndex++];
+    loadVerifiedGlb(stage.url, loadOptions)
+      .then((gltf) => {
         const assembly = gltf.scene;
         assembly.name = 'yueyang-highmodel-complete-tower';
-        root.userData.runtimeLod = 'lod1';
+        root.userData.runtimeLod = stage.lod;
         prepareHighModel(assembly);
         registerPavilionAssembly(root, assembly, 'yueyang');
         root.add(assembly);
+        // No runtime plaque: the helmet roof offers no honest wall to hang it
+        // on and a floating board read worse than none.
         root.userData.highModelReady = true;
-        root.userData.highModelSource = 'lod1-fallback';
+        root.userData.highModelSource = stage.source;
         window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'yueyang' }));
+      })
+      .catch((error: unknown) => {
+        if (isAbortError(error)) return;
+        if (stageIndex < stages.length) {
+          console.warn(`Yueyang GLB ${stage.url} failed, degrading LOD.`, error);
+          loadStage();
+          return;
+        }
+        root.userData.highModelReady = false;
+        root.userData.highModelLoadError = true;
+        root.userData.highModelLoadErrorReason = 'asset-fetch-or-parse-failed';
+        window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'yueyang' }));
+        console.error('Yueyang runtime GLB failed to load.', error);
       });
-    })
-    .catch((error: unknown) => {
-      if (isAbortError(error)) return;
-      root.userData.highModelReady = false;
-      root.userData.highModelLoadError = true;
-      root.userData.highModelLoadErrorReason = 'asset-fetch-or-parse-failed';
-      window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'yueyang' }));
-      console.error('Yueyang runtime GLB failed to load.', error);
-    });
+  };
+  loadStage();
   return root;
 }

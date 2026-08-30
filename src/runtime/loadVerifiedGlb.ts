@@ -62,7 +62,9 @@ export async function loadVerifiedGlb(url: string, options: PavilionModelLoadOpt
   if (options.signal?.aborted) throw abortError();
   const response = await fetch(url, { signal: options.signal, cache: 'force-cache', credentials: 'same-origin' });
   if (!response.ok) throw new Error(`Failed to load ${url}: HTTP ${response.status}`);
-  const buffer = await response.arrayBuffer();
+  // Stream through responseBuffer so onProgress fires per chunk — the loader
+  // otherwise sits at "…" for the whole multi-megabyte GLB fetch.
+  const buffer = await responseBuffer(response, options);
   if (options.signal?.aborted) throw abortError();
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
@@ -72,6 +74,26 @@ export async function loadVerifiedGlb(url: string, options: PavilionModelLoadOpt
     disposeScene(gltf.scene);
     throw abortError();
   }
+  // GLB atlases default to anisotropy 1, so dense high-contrast patterns
+  // (the gold-tile grout dots) shimmer into glitter at grazing angles and
+  // distance. Request anisotropic sampling; the renderer clamps this to the
+  // hardware maximum at upload.
+  gltf.scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      if (!(material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhysicalMaterial)) continue;
+      const maps = [
+        material.map, material.normalMap, material.roughnessMap,
+        material.metalnessMap, material.aoMap, material.emissiveMap,
+      ];
+      for (const texture of maps) {
+        if (!texture) continue;
+        texture.anisotropy = 8;
+        texture.needsUpdate = true;
+      }
+    }
+  });
 
   return gltf;
 }

@@ -2,13 +2,18 @@ import './style.css';
 import * as THREE from 'three';
 import {
   configureYueyangTowerRenderer,
-  createYueyangTowerEnvironment,
   createYueyangTowerInspectControls,
   createYueyangTowerLookDevLights,
 } from './createYueyangTowerStructuralModel';
+import { createSceneEnvironment, TOWER_SUN_PRESETS, getTowerBloomStrength, getTowerGodRayStrength } from './runtime/sceneEnvironment';
+import { createPostStack } from './runtime/postProcessing';
+import { createPoetryPanel } from './runtime/poetryPanel';
+import { createPavilionSteles, findSteleRoot } from './runtime/steleMesh';
+import { createAmbientAtmosphere } from './runtime/ambientAtmosphere';
+import { disposeObjectDeep } from './runtime/deepDispose';
+import { getSceneSpec, type SceneCue } from './runtime/sceneCatalog';
 import {
   createPavilionStudyModel,
-  disposePavilionModel,
   PAVILION_SPECS,
   type PavilionId,
   type PavilionSpec,
@@ -99,13 +104,17 @@ const renderer = new THREE.WebGLRenderer({
 configureYueyangTowerRenderer(renderer);
 renderer.shadowMap.enabled = !noShadow;
 renderer.shadowMap.type = deviceQuality.shadowTechnique === 'pcf-soft' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+// Shadows render on demand: sun position/model only change on tower switches
+// and framing passes, both of which set sunKey.shadow.needsUpdate. Auto-update
+// otherwise re-rendered a 4096px shadow map every single frame.
+renderer.shadowMap.autoUpdate = false;
 renderer.toneMappingExposure = deviceQuality.toneMappingExposure;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, deviceQuality.pixelRatioCap));
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#6b7280');
-scene.fog = new THREE.FogExp2('#6b7280', 0.007);
-scene.environment = createYueyangTowerEnvironment(renderer);
+// Background, fog and environment come from the HDRI-driven poetic scene
+// module (per-tower sky + IBL). No static colour here — the environment owns
+// them so switching pavilions re-grades the whole atmosphere.
 scene.environmentIntensity = deviceQuality.environmentIntensity;
 const lightRig = createYueyangTowerLookDevLights(lightMode);
 scene.add(lightRig);
@@ -115,29 +124,14 @@ sunKey.shadow.radius = deviceQuality.shadowRadius;
 sunKey.shadow.blurSamples = deviceQuality.shadowBlurSamples;
 sunKey.shadow.bias = -0.00025;
 sunKey.shadow.normalBias = 0.03;
-sunKey.shadow.mapSize.set(2048, 2048);
 scene.add(sunKey.target);
 
-const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(52, 96),
-  new THREE.MeshStandardMaterial({ color: '#a49c8d', roughness: 0.98, metalness: 0, depthWrite: true }),
-);
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = -0.05; // Sink 5 cm so the ground never coincides with pavilion base slabs
-// Receive shadows: without a contact shadow every pavilion reads as floating
-// in the air. The positive polygonOffset below only biases depth ordering;
-// shadow reception is unaffected by it.
-ground.receiveShadow = true;
-// Extreme positive polygonOffset guarantees the ground renders strictly behind
-// any pavilion foundation geometry, even when that geometry also applies its
-// own (negative) polygonOffset.  Combined with the 5 cm y-sink, z-fighting
-// between ground and base becomes structurally impossible.
-(ground.material as THREE.MeshStandardMaterial).polygonOffset = true;
-(ground.material as THREE.MeshStandardMaterial).polygonOffsetFactor = 50;
-(ground.material as THREE.MeshStandardMaterial).polygonOffsetUnits = 100;
-(ground.material as THREE.MeshStandardMaterial).depthFunc = THREE.LessEqualDepth;
-ground.renderOrder = -1; // Render first, write depth, never overwritten
-scene.add(ground);
+const poeticEnvironment = createSceneEnvironment(scene, deviceQuality.id, renderer);
+scene.add(poeticEnvironment.root);
+
+// 诗境氛围层:水岸雾气 / 飘絮落英 / 暮色流萤,随楼切换配置。
+const atmosphere = createAmbientAtmosphere(deviceQuality.id);
+scene.add(atmosphere.root);
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 180);
 const controls = createYueyangTowerInspectControls(camera, sceneCanvas);
@@ -146,6 +140,51 @@ controls.dampingFactor = 0.075;
 controls.minPolarAngle = Math.PI * 0.08;
 controls.maxPolarAngle = Math.PI * 0.68;
 controls.enablePan = true;
+
+// HDR chain + bloom finish: hero/standard get bloom + god rays, mobile keeps
+// the single-pass film grade so the per-tower mood survives on the low tier.
+const postStack = createPostStack(renderer, scene, camera, deviceQuality.id);
+// The god-ray mask pass must not see the water (its onBeforeRender would
+// re-render the mirror scene) or the atmosphere billboards (they would punch
+// solid holes in the mask).
+postStack?.setGodRaysExcluded([
+  poeticEnvironment.root.getObjectByName('poetic-river-or-lake') ?? null,
+  atmosphere.root,
+]);
+
+// 诗文抽屉 + 场景碑匾:碑匾立于广场前侧缘,随楼切换显隐,点击开对应篇目。
+const poetryPanel = createPoetryPanel();
+const steles = createPavilionSteles();
+for (const [id, stele] of Object.entries(steles)) {
+  stele.visible = id === 'yueyang';
+  scene.add(stele);
+}
+
+function applyTowerAtmosphere(id: PavilionId): void {
+  const preset = TOWER_SUN_PRESETS[id];
+  sunKey.color = new THREE.Color(preset.color);
+  // A firm, slightly warm key with restrained fills — real sunlight reads
+  // through strong directional contrast, not through even ambient wash.
+  sunKey.intensity = preset.intensity * 0.88;
+  sunKey.castShadow = true;
+  // Per-tower film grade + crepuscular rays follow the same sun preset the
+  // HDRI and key light use, so sky, shadows, streaks and grade all agree.
+  postStack?.setGrade(id);
+  const godRayStrength = reviewParams.get('norays') === '1' ? 0 : getTowerGodRayStrength(id);
+  postStack?.setGodRays(new THREE.Vector3(...preset.direction), godRayStrength, preset.color);
+  // Cool sky fill and warm ground bounce in the hemisphere light, a low rim
+  // to pick eave edges out of the sky; fills stay dim so shadows stay shadows.
+  const fill = lightRig.getObjectByName('sky-fill') as THREE.DirectionalLight | null;
+  const rim = lightRig.getObjectByName('warm-rim') as THREE.DirectionalLight | null;
+  const hemi = lightRig.children.find((child): child is THREE.HemisphereLight => child instanceof THREE.HemisphereLight) ?? null;
+  if (fill) fill.intensity = 0.12;
+  if (rim) rim.intensity = 0.45;
+  if (hemi) {
+    hemi.intensity = 0.28;
+    hemi.color.set(0xb9cfe4);
+    hemi.groundColor.set(0x8a7562);
+  }
+}
 
 function updateControlDistances(bounds: THREE.Box3) {
   const size = bounds.getSize(new THREE.Vector3());
@@ -191,7 +230,7 @@ function frameModel(view = activeView) {
   const size = focusBounds.getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.y, size.z);
   cameraSafetyBounds = bounds.clone();
-  cameraGroundY = Math.max(ground.position.y, bounds.min.y);
+  cameraGroundY = Math.max(poeticEnvironment.groundY, bounds.min.y);
   cameraClearance = Math.max(0.2, Math.min(0.6, span * 0.012));
   const distanceMultiplier = activeSpec.id === 'tengwang'
     ? (window.innerWidth < 720 ? 1.15 : 1.45)
@@ -218,19 +257,33 @@ function frameModel(view = activeView) {
     camera.position.copy(centre).addScaledVector(reviewDirection.normalize(), distance);
     controls.target.copy(centre).add(new THREE.Vector3(0, size.y * 0.06, 0));
   } else {
+    // The tengwang default frame swings ~24° around the tower so the
+    // vermilion dusk disc (正赤如丹) clears the intro title and shares the
+    // shot with the pavilion; other towers keep the classic 45° corner view.
+    const defaultAzimuth = activeSpec.id === 'tengwang' ? 1.22 : Math.PI * 0.25;
+    camera.position.set(
+      centre.x + Math.sin(defaultAzimuth) * distance * 1.16,
+      centre.y + distance * 0.34,
+      centre.z + Math.cos(defaultAzimuth) * distance * 1.16,
+    );
     // The tengwang podium is wide and low relative to the tower, so the
     // default target needs more lift to keep the roof crown in frame.
-    const targetLift = activeSpec.id === 'tengwang' ? 0.16 : 0.06;
-    camera.position.set(centre.x + distance * 0.82, centre.y + distance * 0.54, centre.z + distance * 0.82);
+    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : 0.14;
     controls.target.copy(centre).add(new THREE.Vector3(0, size.y * targetLift, 0));
   }
   camera.near = view === 'low-angle'
     ? THREE.MathUtils.clamp(span / 500, 0.03, 0.12)
     : Math.max(0.1, span / 100);
-  camera.far = Math.max(180, span * 12);
+  // Far reaches past the water horizon so the HDRI sky and the fogged water
+  // blend without clipping: the water plane now extends to 2000m to die inside
+  // the fog, so the far floor must clear it.
+  camera.far = Math.max(2600, span * 12);
   camera.updateProjectionMatrix();
   const shadowExtent = Math.max(12, span * 0.78);
-  sunKey.position.copy(centre).add(new THREE.Vector3(-span * 0.72, span * 1.08, span * 0.66));
+  // Key light direction follows the per-tower HDRI sun so shadows, water
+  // speculars and the photographic sky agree on one sun.
+  const sunDirection = new THREE.Vector3(...TOWER_SUN_PRESETS[activeSpec.id].direction).normalize();
+  sunKey.position.copy(centre).addScaledVector(sunDirection, span * 1.3);
   sunKey.target.position.copy(centre).add(new THREE.Vector3(0, size.y * 0.12, 0));
   const shadowCamera = sunKey.shadow.camera as THREE.OrthographicCamera;
   shadowCamera.left = -shadowExtent;
@@ -249,9 +302,13 @@ function frameModel(view = activeView) {
 
 function constrainInspectionCamera(): void {
   if (!cameraSafetyBounds) return;
-  if (activeSpec.id === 'tengwang') return;
-  const minimumY = cameraGroundY + cameraClearance;
+  // Ground clamp applies to every tower — tengwang included — so the orbit
+  // can never dip the eye below the plaza or the water. Only the collision-box
+  // push-out is skipped for tengwang: its wide podium bounds made the push
+  // fight the intended close framing.
+  const minimumY = Math.max(poeticEnvironment.groundY, cameraGroundY) + cameraClearance;
   if (camera.position.y < minimumY) camera.position.y = minimumY;
+  if (activeSpec.id === 'tengwang') return;
 
   const collisionBounds = cameraSafetyBounds.clone().expandByScalar(cameraClearance);
   if (collisionBounds.containsPoint(camera.position)) {
@@ -338,6 +395,151 @@ async function loadPavilionFactory(spec: PavilionSpec): Promise<PavilionFactory>
   return () => createPavilionStudyModel(spec);
 }
 
+// ---------------------------------------------------------------------------
+// 诗境机位「一键入诗」: sceneCatalog 为每楼准备了三个诗中视角(机位 + 诗句 +
+// 观察导语)。点击按钮以缓动飞行把相机送入机位,面板淡入诗句;拖拽/滚轮打断。
+// ---------------------------------------------------------------------------
+
+const cueButtonsContainer = document.querySelector<HTMLElement>('#scene-cue-buttons');
+const readingPanel = document.querySelector<HTMLElement>('#scene-reading');
+const readingTitle = document.querySelector<HTMLElement>('#reading-title');
+const readingLine = document.querySelector<HTMLElement>('#reading-line');
+const readingObservation = document.querySelector<HTMLElement>('#reading-observation');
+
+type CueFlight = {
+  fromPos: THREE.Vector3;
+  toPos: THREE.Vector3;
+  fromTarget: THREE.Vector3;
+  toTarget: THREE.Vector3;
+  start: number;
+  duration: number;
+};
+
+let cueFlight: CueFlight | null = null;
+let readingTimer: number | null = null;
+// While a poetic cue is active the key light drifts toward the cue's mood sun
+// (the environment module blends fog/water in parallel) and the hemisphere
+// fill takes the mood's ambient tone; god rays bias with the mood sun.
+let sunMood: { color: string; intensity: number; ambient: string; ambientIntensity: number } | null = null;
+const sunTmpColor = new THREE.Color();
+const ambientTmpColor = new THREE.Color();
+
+const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+function hideSceneReading(): void {
+  readingPanel?.classList.remove('is-visible');
+  if (readingTimer !== null) {
+    window.clearTimeout(readingTimer);
+    readingTimer = null;
+  }
+}
+
+function showSceneReading(cue: SceneCue): void {
+  if (!readingPanel || !readingTitle || !readingLine || !readingObservation) return;
+  readingTitle.textContent = cue.title;
+  readingLine.textContent = cue.line;
+  readingObservation.textContent = cue.observation;
+  readingPanel.classList.add('is-visible');
+  if (readingTimer !== null) window.clearTimeout(readingTimer);
+  readingTimer = window.setTimeout(hideSceneReading, 10000);
+}
+
+function buildCueButtons(): void {
+  if (!cueButtonsContainer) return;
+  cueButtonsContainer.innerHTML = '';
+  for (const cue of getSceneSpec(activeSpec.id).cues) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = cue.title;
+    button.setAttribute('aria-label', `诗境机位 · ${cue.title} · ${cue.line}`);
+    button.addEventListener('click', () => flyToCue(cue));
+    cueButtonsContainer.appendChild(button);
+  }
+}
+
+function flyToCue(cue: SceneCue): void {
+  cueFlight = {
+    fromPos: camera.position.clone(),
+    toPos: new THREE.Vector3(...cue.camera.position),
+    fromTarget: controls.target.clone(),
+    toTarget: new THREE.Vector3(...cue.camera.target),
+    start: performance.now(),
+    duration: 1900,
+  };
+  controls.enabled = false;
+  poeticEnvironment.setMood(cue.mood);
+  const preset = TOWER_SUN_PRESETS[activeSpec.id];
+  const moodSunRatio = cue.mood.sunIntensity / preset.intensity;
+  sunMood = {
+    color: cue.mood.sunColor,
+    intensity: cue.mood.sunIntensity * 0.88,
+    ambient: cue.mood.ambientColor,
+    ambientIntensity: cue.mood.ambientIntensity * 0.28,
+  };
+  // Dusk cues throw longer crepuscular shafts; bright ones pull back.
+  postStack?.setGodRays(
+    new THREE.Vector3(...preset.direction),
+    (reviewParams.get('norays') === '1' ? 0 : getTowerGodRayStrength(activeSpec.id)) * moodSunRatio,
+    cue.mood.sunColor,
+  );
+  // Grade bias per cue mood: dawn lifts cool and bright, autumn dusk sinks
+  // warm and dark — the difference between 晨雾 and 落霞.
+  postStack?.setMoodBias(
+    cue.mood.name === 'dawn'
+      ? { tint: [0.98, 1.0, 1.04], exposure: 0.015 }
+      : cue.mood.name === 'autumnDusk'
+        ? { tint: [1.08, 0.96, 0.88], exposure: -0.05 }
+        : { tint: [1.0, 1.0, 1.0], exposure: 0.015 },
+  );
+  // 意象构图: 整帧向太阳方位横移, 让日轮/霞光真正入画, 主阁偏向一侧。
+  const sunFlat = new THREE.Vector3(preset.direction[0], 0, preset.direction[2]).normalize();
+  const lateral = new THREE.Vector3(-sunFlat.z, 0, sunFlat.x);
+  const camDistance = cueFlight.toPos.distanceTo(cueFlight.toTarget);
+  const frameShift = (cue.mood.name === 'clearDay' ? 2.5 : 7) * THREE.MathUtils.clamp(camDistance / 40, 0.4, 1.2);
+  cueFlight.toPos.addScaledVector(lateral, frameShift);
+  cueFlight.toTarget.addScaledVector(lateral, frameShift * 0.55);
+  showSceneReading(cue);
+  if (status) status.textContent = `POETIC VIEW · ${cue.title}`;
+}
+
+function cancelCueFlight(): void {
+  if (!cueFlight && !sunMood) return;
+  cueFlight = null;
+  poeticEnvironment.setMood(null);
+  sunMood = null;
+  postStack?.setMoodBias(null);
+  controls.autoRotate = false;
+  // Restore the tower's own atmosphere (grade, god rays, light rig) in one
+  // idempotent call; the render-loop lerp eases the sun back on top.
+  applyTowerAtmosphere(activeSpec.id);
+  controls.enabled = true;
+}
+
+function updateCueFlight(): void {
+  if (!cueFlight) return;
+  const progress = Math.min(1, (performance.now() - cueFlight.start) / cueFlight.duration);
+  const eased = easeInOutCubic(progress);
+  camera.position.lerpVectors(cueFlight.fromPos, cueFlight.toPos, eased);
+  controls.target.lerpVectors(cueFlight.fromTarget, cueFlight.toTarget, eased);
+  if (progress >= 1) {
+    cueFlight = null;
+    controls.enabled = true;
+    // Once the cue settles, a whisper-slow drift keeps the frame alive —
+    // cinematic hold instead of a frozen still.
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.22;
+  }
+}
+
+sceneCanvas.addEventListener('pointerdown', () => {
+  cancelCueFlight();
+  hideSceneReading();
+});
+sceneCanvas.addEventListener('wheel', () => {
+  cancelCueFlight();
+  hideSceneReading();
+}, { passive: true });
+
 function activateModel(model: THREE.Group, spec: PavilionSpec) {
   activeModel = model;
   window.activeModel = model;
@@ -409,11 +611,22 @@ async function selectPavilion(id: PavilionId) {
   if (activeModel) {
     getPavilionAssemblyRuntime(activeModel)?.dispose();
     scene.remove(activeModel);
-    disposePavilionModel(activeModel);
+    // Deep dispose: geometry + materials + every texture slot. The previous
+    // shallow pass leaked the GLB atlases on every tower switch.
+    disposeObjectDeep(activeModel);
   }
+  cancelCueFlight();
+  hideSceneReading();
   activeSpec = spec;
   window.__CHINA_TOWERS_READY__ = false;
   updateCopy(spec);
+  applyTowerAtmosphere(spec.id);
+  poeticEnvironment.setPavilion(spec.id);
+  atmosphere.setPavilion(spec.id);
+  buildCueButtons();
+  postStack?.setBloomStrength(getTowerBloomStrength(spec.id));
+  poetryPanel.setPavilion(spec.id);
+  for (const [id, stele] of Object.entries(steles)) stele.visible = id === spec.id;
   const loadingFallback = HIGH_MODEL_IDS.has(spec.id) ? null : createPavilionStudyModel(spec);
   if (loadingFallback) {
     loadingFallback.name = `${spec.id}-module-loading-fallback`;
@@ -463,7 +676,7 @@ async function selectPavilion(id: PavilionId) {
     });
     if (loadingFallback) {
       scene.remove(loadingFallback);
-      disposePavilionModel(loadingFallback);
+      disposeObjectDeep(loadingFallback);
     }
     activateModel(model, spec);
     if (!HIGH_MODEL_IDS.has(spec.id)) window.__CHINA_TOWERS_READY__ = true;
@@ -527,6 +740,8 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key.toLowerCase() === 'e') setExploded(!exploded);
   if (event.key.toLowerCase() === 'v') setLowAngleView(activeView !== 'low-angle');
+  if (event.key.toLowerCase() === 'p') poetryPanel.toggle();
+  if (event.key === 'Escape') poetryPanel.setOpen(false);
   if (event.key.toLowerCase() === 'r') {
     getPavilionAssemblyRuntime(activeModel)?.clearSelection();
     if (window.__CHINA_TOWERS_DIAGNOSTICS__) window.__CHINA_TOWERS_DIAGNOSTICS__.selectedPart = null;
@@ -583,6 +798,15 @@ sceneCanvas.addEventListener('pointerup', (event) => {
     -((event.clientY - rect.top) / rect.height) * 2 + 1,
   );
   raycaster.setFromCamera(pointer, camera);
+  // Steles sit outside the assembly pick set; a hit opens the poetry drawer
+  // on the stele's inscribed work instead of selecting a tower part.
+  const steleHit = raycaster.intersectObjects(Object.values(steles).filter((stele) => stele.visible), true)[0];
+  const steleRoot = steleHit ? findSteleRoot(steleHit.object) : null;
+  if (steleRoot) {
+    poetryPanel.showWork(steleRoot.userData.steleWorkIndex as number);
+    if (status) status.textContent = 'POETRY · 碑刻原文已打开';
+    return;
+  }
   const hit = runtime.pick(raycaster.ray);
   const selected = runtime.selectObject(hit?.object ?? null);
   if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
@@ -604,18 +828,54 @@ window.addEventListener('china-towers-model-progress', (event) => {
   }
 });
 
+let lastFrameWidth = -1;
+let lastFrameHeight = -1;
+
 function resize() {
   const width = sceneCanvas.clientWidth;
   const height = sceneCanvas.clientHeight;
+  // Early-out on unchanged size: setSize + composer.setSize every frame is
+  // wasted work (and stalls on some drivers via implicit glViewport churn).
+  if (width === lastFrameWidth && height === lastFrameHeight) return;
+  lastFrameWidth = width;
+  lastFrameHeight = height;
   renderer.setSize(width, height, false);
+  postStack?.setSize(width, height);
   camera.aspect = width / Math.max(1, height);
   camera.updateProjectionMatrix();
 }
 
+const renderClock = new THREE.Clock();
+
 function render() {
   resize();
   controls.update();
+  updateCueFlight();
   constrainInspectionCamera();
+  // The composer runs several internal passes (water reflection, bloom), and
+  // info.autoReset would otherwise zero the counters after every pass, leaving
+  // diagnostics with just the final bloom quad. Reset once per frame instead.
+  if (postStack) {
+    renderer.info.autoReset = false;
+    renderer.info.reset();
+  }
+  const frameDelta = renderClock.getDelta();
+  poeticEnvironment.update(frameDelta, camera);
+  atmosphere.update(frameDelta, performance.now() / 1000, camera);
+  // Key light eases toward the active cue's mood sun, or back to the tower's
+  // base sun when no cue is active; hemisphere fill takes the mood ambient.
+  const sunBase = TOWER_SUN_PRESETS[activeSpec.id];
+  const sunTarget = sunMood ?? { color: sunBase.color, intensity: sunBase.intensity * 0.88, ambient: '#b9cfe4', ambientIntensity: 0.28 };
+  const sunBlend = 1 - Math.exp(-frameDelta * 2.2);
+  sunKey.color.lerp(sunTmpColor.set(sunTarget.color), sunBlend);
+  sunKey.intensity += (sunTarget.intensity - sunKey.intensity) * sunBlend;
+  const hemi = lightRig.children.find((child): child is THREE.HemisphereLight => child instanceof THREE.HemisphereLight) ?? null;
+  if (hemi) {
+    hemi.color.lerp(ambientTmpColor.set(sunTarget.ambient), sunBlend);
+    hemi.intensity += (sunTarget.ambientIntensity - hemi.intensity) * sunBlend;
+  }
+  if (postStack) postStack.render();
+  else renderer.render(scene, camera);
   const assemblyRuntime = getPavilionAssemblyRuntime(activeModel);
   if (assemblyRuntime && Math.abs(explodedTarget - explodedAmount) > 0.001) {
     explodedAmount = THREE.MathUtils.lerp(explodedAmount, explodedTarget, 0.14);
@@ -625,7 +885,6 @@ function render() {
   if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
     window.__CHINA_TOWERS_DIAGNOSTICS__.explodedAmount = assemblyRuntime?.explodedAmount ?? 0;
   }
-  renderer.render(scene, camera);
   if (debugLoop && activeSpec.id === 'tengwang') {
     console.log('[Tengwang] render loop active, diagnostics ready:', !!window.__CHINA_TOWERS_DIAGNOSTICS__?.ready, 'model:', activeModel?.name, 'children:', activeModel?.children.length);
   }

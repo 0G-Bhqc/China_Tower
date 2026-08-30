@@ -3,7 +3,10 @@ import type { PavilionId } from '../createPavilionGalleryModel';
 
 export type SceneLayerId = 'near' | 'mid' | 'far';
 
+export type SceneMoodName = 'dawn' | 'clearDay' | 'autumnDusk';
+
 export type SceneMood = {
+  name: SceneMoodName;
   skyTop: string;
   skyBottom: string;
   fogColor: string;
@@ -41,16 +44,19 @@ export type ScenePackageSpec = {
 };
 
 const dawn: SceneMood = {
+  name: 'dawn',
   skyTop: '#9eafb0', skyBottom: '#e6ded0', fogColor: '#a9b8b5', fogDensity: 0.018,
   sunColor: '#f2d19a', sunIntensity: 2.1, waterColor: '#466d73', waterOpacity: 0.82,
   ambientColor: '#b8c7c1', ambientIntensity: 1.2,
 };
 const clearDay: SceneMood = {
+  name: 'clearDay',
   skyTop: '#7295a1', skyBottom: '#d9d7c8', fogColor: '#9aa9aa', fogDensity: 0.012,
   sunColor: '#f8d9a1', sunIntensity: 2.45, waterColor: '#3f6879', waterOpacity: 0.78,
   ambientColor: '#a9bfca', ambientIntensity: 1.24,
 };
 const autumnDusk: SceneMood = {
+  name: 'autumnDusk',
   skyTop: '#765f5d', skyBottom: '#d6a27a', fogColor: '#987e76', fogDensity: 0.016,
   sunColor: '#ffd096', sunIntensity: 2.35, waterColor: '#4b6067', waterOpacity: 0.8,
   ambientColor: '#b18c80', ambientIntensity: 1.05,
@@ -74,7 +80,7 @@ export const SCENE_CATALOG: Record<PavilionId, ScenePackageSpec> = {
     ],
   },
   tengwang: {
-    id: 'tengwang', sourceLabel: '审计 FBX · 临江组团环境构件', packageUrl: '/assets/scene-pack/tengwang-environment.glb', packageReport: '/evidence/scene-packs/tengwang-environment.json', packageStatus: 'source-backed', availableLayers: ['mid', 'far'], sceneCenter: [0, 0, 0], defaultWater: { position: [0, -0.08, -24], size: [110, 42], rotation: [-Math.PI / 2, 0, 0] },
+    id: 'tengwang', sourceLabel: '审计 FBX · 临江组团来源存疑，运行时不采用', packageUrl: '', packageReport: '/evidence/scene-packs/tengwang-environment.json', packageStatus: 'no-independent-environment-mesh', availableLayers: ['mid', 'far'], sceneCenter: [0, 0, 0], defaultWater: { position: [0, -0.08, -24], size: [110, 42], rotation: [-Math.PI / 2, 0, 0] },
     cues: [
       { id: 'third-autumn', title: '序属三秋', line: '潦水尽而寒潭清，烟光凝而暮山紫', observation: '以高台边缘作为入场线，台阶、平台和檐廊依次进入视野。', sceneAnchor: 'high-terrace', anchor: [0, 2.2, 8], focus: 'platform', camera: { position: [25, 8.5, 27], target: [0, 12, 0] }, mood: autumnDusk },
       { id: 'south-bank-cloud', title: '南浦朝云', line: '画栋朝飞南浦云，珠帘暮卷西山雨', observation: '镜头横向掠过高台，观看楼阁的翼部如何把江景切成朝暮两面。', sceneAnchor: 'river-bank', anchor: [0, 3, -12], focus: 'platform', camera: { position: [-27, 14, 21], target: [0, 13, -8] }, mood: dawn },

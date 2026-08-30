@@ -98,10 +98,13 @@ function tileRidgeFactor(
     ez = hx * invLen;
   }
   const phase = (centroid.x * ex + centroid.z * ez) / tileWidth;
-  // Smooth triangle wave in [0, 1]: ridge crest ~0.55, gutter ~0.25.
+  // Smooth triangle wave in [0, 1]. Kept nearly flat: vertex colours are
+  // interpolated without mipmaps, so any visible stripe contrast turns into
+  // distance glitter once roof tessellation approaches pixel density. The
+  // tile-course relief is carried by the zone normal maps instead.
   const frac = phase - Math.floor(phase);
   const tri = 1 - Math.abs(frac * 2 - 1);
-  return 0.68 + 0.5 * tri * tri;
+  return 0.94 + 0.08 * tri * tri;
 }
 
 /**
@@ -114,11 +117,19 @@ function tileRidgeFactor(
  *   - 'roof': every upward face is roof.  Required when one mesh spans the
  *     whole tower (e.g. the Huanghe #25 roof mesh): the in-mesh height gate
  *     would otherwise misclassify the lower roof tiers as stone.
+ * `options.slopeAsRoof` routes tilted faces (normal.y > 0.18) to the roof zone
+ *   instead of wall/vermilion.  Chinese pavilion roofs are steep; without it
+ *   the slope faces fall under the vertical gate and read as plaster.  Enable
+ *   it only for meshes known to be roof-dominated (auxiliary pavilions).
+ * `options.verticalZone` overrides the vertical-face gate: 'height' (default)
+ *   splits wall/vermilion by height; 'vermilion' paints every vertical face
+ *   vermilion — right for whole-tower roof meshes whose vertical faces are all
+ *   fascia and brackets, where the pink wall tone speckles the eave bands.
  */
 export function recolorMeshSurfaces(
   mesh: THREE.Mesh,
   palette: SemanticPalette = DEFAULT_SEMANTIC_PALETTE,
-  options: { upwardZone?: 'auto' | 'roof' } = {},
+  options: { upwardZone?: 'auto' | 'roof'; slopeAsRoof?: boolean; verticalZone?: 'height' | 'vermilion' } = {},
 ): boolean {
   const geometry = mesh.geometry;
   const position = geometry.getAttribute('position');
@@ -145,6 +156,8 @@ export function recolorMeshSurfaces(
   // Mark vertex -> zone colour assignment (last write wins is fine; the
   // semantic boundaries are creases by construction).
   const assigned = new Uint8Array(position.count);
+  const zoneFaceCounts: Record<keyof typeof zoneColors, number> = { roof: 0, timber: 0, vermilion: 0, wall: 0, stone: 0 };
+  let faceTotal = 0;
 
   const index = geometry.getIndex();
   const triangleCount = index ? index.count / 3 : position.count / 3;
@@ -177,23 +190,34 @@ export function recolorMeshSurfaces(
     let zone: keyof typeof zoneColors;
     if (_n.y > 0.55) {
       zone = options.upwardZone === 'roof' || heightNorm > 0.42 ? 'roof' : 'stone';
+    } else if (options.slopeAsRoof && _n.y > 0.18) {
+      // Steep roof slope: tilted upward but under the flat-roof gate. Walls
+      // are vertical (normal.y ≈ 0) so this band is roof-safe.
+      zone = 'roof';
     } else if (_n.y < -0.5) {
       zone = 'timber';
-    } else if (heightNorm > 0.55) {
+    } else if (options.verticalZone === 'vermilion' || heightNorm > 0.55) {
       zone = 'vermilion';
     } else {
       zone = 'wall';
     }
+    zoneFaceCounts[zone] += 1;
+    faceTotal += 1;
 
     // Deterministic per-face value variation so broad surfaces keep grain.
-    const variation = 0.9 + 0.16 * faceHash(
+    // Roof faces get a tighter band: their tessellation is so dense that
+    // per-face contrast reads as TV static at distance rather than grain.
+    const hash01 = faceHash(
       Math.round(_cent.x * 16.7),
       Math.round(_cent.y * 16.7),
       Math.round(_cent.z * 16.7),
     );
+    const variation = zone === 'roof' ? 0.95 + 0.08 * hash01 : 0.9 + 0.16 * hash01;
     // Roof faces additionally carry procedural barrel-tile ridges so the
-    // surface reads as tile courses at close range.
-    const ridge = zone === 'roof' ? tileRidgeFactor(_cent, _n, Math.max(height * 0.009, 0.32)) : 1;
+    // surface reads as tile courses at close range. Wider courses (0.55m
+    // floor) keep the stripe period above per-triangle size so it does not
+    // alias into glitter.
+    const ridge = zone === 'roof' ? tileRidgeFactor(_cent, _n, Math.max(height * 0.012, 0.55)) : 1;
     const base = zoneColors[zone];
     for (const vi of [ia, ib, ic]) {
       if (assigned[vi]) continue;
@@ -205,6 +229,18 @@ export function recolorMeshSurfaces(
   }
 
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  // Publish the dominant zone so loaders can layer zone-matched relief
+  // (normal/roughness) textures on top of the vertex-colour albedo.
+  let dominantZone: keyof typeof zoneColors = 'wall';
+  let dominantCount = -1;
+  for (const [zone, count] of Object.entries(zoneFaceCounts)) {
+    if (count > dominantCount) {
+      dominantCount = count;
+      dominantZone = zone as keyof typeof zoneColors;
+    }
+  }
+  mesh.userData.semanticZone = faceTotal > 0 ? dominantZone : null;
 
   const recolored = source.clone();
   recolored.color.set(0xffffff);

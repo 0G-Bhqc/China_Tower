@@ -16,13 +16,13 @@ export type DeviceQualityProfile = {
 
 const PROFILES: Record<DeviceQualityProfile['id'], DeviceQualityProfile> = {
   hero: {
-    id: 'hero', preferredLod: 'lod0', pixelRatioCap: 1.75, shadowMapSize: 2048,
-    shadowTechnique: 'pcf-soft', shadowRadius: 5, shadowBlurSamples: 16,
+    id: 'hero', preferredLod: 'lod0', pixelRatioCap: 1.75, shadowMapSize: 4096,
+    shadowTechnique: 'pcf-soft', shadowRadius: 3.5, shadowBlurSamples: 16,
     toneMappingExposure: 1.05, environmentIntensity: 1.12,
   },
   standard: {
-    id: 'standard', preferredLod: 'lod1', pixelRatioCap: 1.35, shadowMapSize: 1536,
-    shadowTechnique: 'pcf-soft', shadowRadius: 3, shadowBlurSamples: 8,
+    id: 'standard', preferredLod: 'lod1', pixelRatioCap: 1.35, shadowMapSize: 2048,
+    shadowTechnique: 'pcf-soft', shadowRadius: 2.5, shadowBlurSamples: 8,
     toneMappingExposure: 1.02, environmentIntensity: 1,
   },
   mobile: {

@@ -11,6 +11,11 @@ export type PavilionPartRecord = {
   object: THREE.Mesh;
   origin: THREE.Vector3;
   explodeOffset: THREE.Vector3;
+  // World-space bounds cached at registration (explode = 0) and refreshed
+  // only when setExploded moves parts. pick() reads this instead of running
+  // Box3.setFromObject per part per click — on the tengwang master that was
+  // 4500+ bounding-box traversals per tap, long enough to stutter.
+  bounds: THREE.Box3;
 };
 
 export type PavilionAssemblyRuntime = {
@@ -167,7 +172,7 @@ export function registerPavilionAssembly(
     mesh.userData.pickingPart = id;
     mesh.userData.explodeOrigin = origin.clone();
     mesh.userData.explodeOffset = explodeOffset.clone();
-    return { id, label: `${CATEGORY_LABELS[category]} ${String(index + 1).padStart(2, '0')}`, category, object: mesh, origin, explodeOffset };
+    return { id, label: `${CATEGORY_LABELS[category]} ${String(index + 1).padStart(2, '0')}`, category, object: mesh, origin, explodeOffset, bounds };
   });
 
   let selected: PavilionPartRecord | null = null;
@@ -199,6 +204,10 @@ export function registerPavilionAssembly(
         part.object.position.copy(part.origin).addScaledVector(part.explodeOffset, clamped);
         part.object.updateMatrix();
       }
+      // Cached pick bounds must track the exploded positions; refresh only
+      // while parts actually move, never per frame at rest.
+      assembly.updateMatrixWorld(true);
+      for (const part of parts) part.bounds.setFromObject(part.object);
     },
     pick: (ray) => {
       let nearest: PavilionPartRecord | null = null;
@@ -206,8 +215,7 @@ export function registerPavilionAssembly(
       const hit = new THREE.Vector3();
       for (const part of parts) {
         if (!part.object.visible) continue;
-        const bounds = new THREE.Box3().setFromObject(part.object);
-        const point = ray.intersectBox(bounds, hit);
+        const point = ray.intersectBox(part.bounds, hit);
         if (!point) continue;
         const distance = ray.origin.distanceTo(point);
         if (distance < nearestDistance) {

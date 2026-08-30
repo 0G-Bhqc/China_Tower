@@ -1,36 +1,165 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PAVILION_SPECS } from './createPavilionGalleryModel';
-import { selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
+import { detectDeviceQualityProfile, selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
 import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
+import { computeStructuralBaseY } from './runtime/grounding';
 import { createPlaqueMesh, type PlaqueSpec } from './runtime/createPlaqueMesh';
 import { needsSemanticRecolor, recolorMeshSurfaces, type SemanticPalette, isNearWhitePlaceholder } from './runtime/semanticSurfaceRecolor';
-import { generateTengwangRoofTextures, generateTengwangWoodTextures, generateTengwangWallTextures, NORMAL_STRENGTH, AO_STRENGTH } from './createTengwangProceduralTextures';
+import { applySemanticRelief } from './runtime/semanticRelief';
+import { MeshoptSimplifier } from './vendor/meshopt_simplifier.module';
 
-// Pre-generated texture caches (singletons per session)
-let cachedRoofTextures: ReturnType<typeof generateTengwangRoofTextures> | null = null;
-let cachedWoodTextures: ReturnType<typeof generateTengwangWoodTextures> | null = null;
-let cachedWallTextures: ReturnType<typeof generateTengwangWallTextures> | null = null;
+// ---------------------------------------------------------------------------
+// High-precision admission: keep the master's fidelity, drop its invisible
+// density. Every mesh simplifies toward a global triangle budget with a hard
+// error ceiling (1% of each mesh's extent) and locked borders, so eave tips,
+// ornaments and silhouettes never visibly degrade while flat expanses lose
+// their redundant interior vertices. Afterwards geometries merge per material,
+// collapsing 4500+ draw calls into a few hundred. Vendored simplifier:
+// meshoptimizer 0.22 (MIT), the same algorithm gltfpack uses.
+// ---------------------------------------------------------------------------
+const HP_TRIANGLE_BUDGET = 3_200_000;
+const HP_MAX_ERROR = 0.02;
+const HP_MIN_SIMPLIFY_TRIANGLES = 600;
 
-function getOrCreateRoofTextures() {
-  if (!cachedRoofTextures) {
-    cachedRoofTextures = generateTengwangRoofTextures('#1f2a25');
+function compactGeometry(geometry: THREE.BufferGeometry, newIndices: Uint32Array): void {
+  const position = geometry.getAttribute('position');
+  const oldVertexCount = position.count;
+  const remap = new Uint32Array(oldVertexCount).fill(0xffffffff);
+  const indices = new Uint32Array(newIndices.length);
+  let next = 0;
+  for (let i = 0; i < newIndices.length; i += 1) {
+    const source = newIndices[i];
+    if (remap[source] === 0xffffffff) {
+      remap[source] = next;
+      next += 1;
+    }
+    indices[i] = remap[source];
   }
-  return cachedRoofTextures;
+  for (const name of Object.keys(geometry.attributes)) {
+    const attribute = geometry.getAttribute(name);
+    const itemSize = attribute.itemSize;
+    const ArrayCtor = (attribute.array as Float32Array).constructor as new (length: number) => Float32Array;
+    const compacted = new ArrayCtor(next * itemSize);
+    const source = attribute.array as ArrayLike<number>;
+    for (let v = 0; v < oldVertexCount; v += 1) {
+      const target = remap[v];
+      if (target === 0xffffffff) continue;
+      for (let c = 0; c < itemSize; c += 1) compacted[target * itemSize + c] = source[v * itemSize + c];
+    }
+    geometry.setAttribute(name, new THREE.BufferAttribute(compacted, itemSize));
+  }
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 }
 
-function getOrCreateWoodTextures() {
-  if (!cachedWoodTextures) {
-    cachedWoodTextures = generateTengwangWoodTextures('#3a1c16');
+async function admitHighPrecisionBudget(assembly: THREE.Group): Promise<string> {
+  if (!MeshoptSimplifier.supported) return 'simplifier unavailable, master kept whole';
+  await MeshoptSimplifier.ready;
+  const records: Array<{ geometry: THREE.BufferGeometry; triangleCount: number }> = [];
+  let totalTriangles = 0;
+  const meshList: THREE.Mesh[] = [];
+  assembly.traverse((object) => {
+    if ((object as THREE.Mesh).isMesh) meshList.push(object as THREE.Mesh);
+  });
+  for (const mesh of meshList) {
+    const geometry = mesh.geometry;
+    const index = geometry.getIndex();
+    const position = geometry.getAttribute('position');
+    if (!index || !position) continue;
+    const triangleCount = index.count / 3;
+    if (triangleCount < HP_MIN_SIMPLIFY_TRIANGLES) continue;
+    records.push({ geometry, triangleCount });
+    totalTriangles += triangleCount;
   }
-  return cachedWoodTextures;
+  if (totalTriangles <= HP_TRIANGLE_BUDGET) return `within budget (${Math.round(totalTriangles)} tris)`;
+  const ratio = HP_TRIANGLE_BUDGET / totalTriangles;
+  let before = 0;
+  let after = 0;
+  for (const { geometry, triangleCount } of records) {
+    before += triangleCount;
+    const targetTriangles = Math.max(3, Math.floor(triangleCount * ratio));
+    const sourceIndices = new Uint32Array(geometry.getIndex()!.array);
+    const positions = geometry.getAttribute('position').array as Float32Array;
+    const [simplified] = MeshoptSimplifier.simplify(sourceIndices, positions, 3, targetTriangles * 3, HP_MAX_ERROR, ['LockBorder']);
+    if (simplified.length < sourceIndices.length) {
+      compactGeometry(geometry, simplified);
+      after += simplified.length / 3;
+    } else {
+      after += triangleCount;
+    }
+  }
+  return `simplified ${Math.round(before)} → ${Math.round(after)} tris (error ≤ ${(HP_MAX_ERROR * 100).toFixed(1)}% of extent, borders locked)`;
 }
 
-function getOrCreateWallTextures() {
-  if (!cachedWallTextures) {
-    cachedWallTextures = generateTengwangWallTextures('#5e574b');
+/**
+ * Merge per-material geometry groups into single meshes so the 4500-mesh
+ * master stops costing 4500 draw calls per frame. Parts that survived the
+ * merge keep multi-material meshes intact; registered assembly parts become
+ * the merged groups (pick/explode operate at that granularity).
+ */
+function mergeAssemblyByMaterial(assembly: THREE.Group): number {
+  assembly.updateMatrixWorld(true);
+  // Bake each mesh's transform RELATIVE to the assembly, not world: merged
+  // meshes re-enter as children of the assembly and must not inherit its
+  // scale/position a second time.
+  const inverseAssembly = new THREE.Matrix4().copy(assembly.matrixWorld).invert();
+  const meshList: THREE.Mesh[] = [];
+  assembly.traverse((object) => {
+    if ((object as THREE.Mesh).isMesh) meshList.push(object as THREE.Mesh);
+  });
+  type Group = { material: THREE.Material; attributesKey: string; geometries: THREE.BufferGeometry[] };
+  const groups = new Map<string, Group>();
+  const kept: THREE.Mesh[] = [];
+  const seenGeometries = new Set<THREE.BufferGeometry>();
+  const bakedGeometries: THREE.BufferGeometry[] = [];
+  for (const mesh of meshList) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const geometry = mesh.geometry;
+    if (materials.length !== 1 || !geometry.index) {
+      kept.push(mesh);
+      continue;
+    }
+    const attributesKey = Object.keys(geometry.attributes).sort()
+      .map((name) => `${name}:${geometry.getAttribute(name).itemSize}`)
+      .join('|');
+    const key = `${materials[0].uuid}::${attributesKey}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { material: materials[0], attributesKey, geometries: [] };
+      groups.set(key, group);
+    }
+    // A geometry reused by several meshes must be cloned per instance before
+    // its assembly-relative transform is baked in.
+    let baked = geometry;
+    if (seenGeometries.has(geometry)) baked = geometry.clone();
+    seenGeometries.add(geometry);
+    baked.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverseAssembly, mesh.matrixWorld));
+    bakedGeometries.push(baked);
+    group.geometries.push(baked);
   }
-  return cachedWallTextures;
+
+  for (const mesh of meshList) mesh.parent?.remove(mesh);
+
+  let mergedIndex = 0;
+  for (const group of groups.values()) {
+    if (group.geometries.length === 0) continue;
+    const merged = group.geometries.length === 1
+      ? group.geometries[0]
+      : mergeGeometries(group.geometries, false);
+    if (!merged) continue;
+    merged.computeBoundingBox();
+    merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, group.material);
+    mesh.name = `tengwang-merged-${String(mergedIndex).padStart(3, '0')}`;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    assembly.add(mesh);
+    mergedIndex += 1;
+  }
+  for (const mesh of kept) assembly.add(mesh);
+  for (const geometry of bakedGeometries) geometry.dispose();
+  return mergedIndex + kept.length;
 }
 
 const TENGWANG_LODS: Record<RuntimeLod, string> = {
@@ -42,9 +171,6 @@ const TENGWANG_LODS: Record<RuntimeLod, string> = {
 // High-precision source: 3D资产/滕王阁（1）/3d66.com_22753718.max
 // Convert to GLB and place at: public/assets/tengwang-high-precision/tengwang-22753718.glb
 const TENGWANG_HIGH_PRECISION_GLB = '/assets/tengwang-high-precision/tengwang-22753718.glb';
-
-// Load order: high-precision first, then semantic GLB, then LOD0 fallback.
-const TENGWANG_SEMANTIC_GLB = TENGWANG_LODS.lod0;
 
 // Tengwang reads as dark grey-green tile roofs on strong vermilion work.
 const TENGWANG_SEMANTIC_PALETTE: SemanticPalette = {
@@ -68,17 +194,33 @@ const TENGWANG_PLAQUES: PlaqueSpec[] = [
   },
 ];
 
-function attachPlaques(root: THREE.Group): void {
+function attachPlaques(root: THREE.Group, focusBounds: THREE.Box3): void {
   for (const spec of TENGWANG_PLAQUES) {
-    const plaque = createPlaqueMesh(spec);
-    plaque.position.set(...spec.position);
+    // Position the plaque from the live focus bounds instead of baked magic
+    // numbers: the high-precision asset's native scale changed several times,
+    // and a fixed y/z only ever matched one of them. The board hugs the tower
+    // body (72% up, between the centre and the podium's front edge) so it
+    // never floats out in front of the wide base slabs.
+    const size = focusBounds.getSize(new THREE.Vector3());
+    const width = THREE.MathUtils.clamp(size.y * 0.1, 2.2, 4.5);
+    const plaque = createPlaqueMesh({
+      ...spec,
+      width,
+      height: width * (spec.height / spec.width),
+      // Face the default camera corridor (+x/+z); the baked π-rotation in the
+      // dead-code spec pointed the board away from every current viewpoint.
+      rotation: [0, Math.PI * 0.12, 0],
+    });
+    plaque.position.set(0, focusBounds.min.y + size.y * 0.72, focusBounds.min.z + size.z * 0.66);
     plaque.userData.pavilionPlaque = { text: spec.text, bgColor: spec.bgColor, textColor: spec.textColor };
     root.add(plaque);
   }
 }
 
-function calibratedMaterial(source: THREE.Material): THREE.Material {
-  // Always clone and force opaque so the high-precision model never renders
+// Zone relief now comes from the shared runtime/semanticRelief module, whose
+// texture singletons are shared across all three tower loaders.
+
+function calibratedMaterial(source: THREE.Material): THREE.Material {  // Always clone and force opaque so the high-precision model never renders
   // as an invisible/faint silhouette because of transparency or zero opacity.
   const clone = source.clone();
   clone.transparent = false;
@@ -240,6 +382,9 @@ function prepareHighModel(assembly: THREE.Group): void {
     object.userData.pickingPart = object.name;
   });
 
+  const reliefMeshes = applySemanticRelief(assembly);
+  console.info(`[Tengwang] Semantic relief textures applied to ${reliefMeshes} recolored mesh(es).`);
+
   // Normalize the imported high-precision model into the shared pavilion
   // gallery scale. The source scene may be authored at unusual world scale,
   // so compute actual bounds and rescale to a consistent target size.
@@ -291,10 +436,13 @@ function prepareHighModel(assembly: THREE.Group): void {
   const centre = bounds.getCenter(new THREE.Vector3());
   console.log('[Tengwang] postScale bounds:', bounds.min.toString(), '->', bounds.max.toString(), 'centre:', centre.toString(), 'span:', Math.max(...bounds.getSize(new THREE.Vector3()).toArray()));
 
-  // Centre on the gallery ground plane; keep the base grounded.
+  // Centre on the gallery ground plane; keep the base grounded. Ground on the
+  // structural base plane rather than the raw bounds minimum: this asset's
+  // retaining-wall meshes sink ~5 native units beneath the source-scene floor,
+  // and grounding on them hoisted the whole complex into the air.
   assembly.position.x -= centre.x;
   assembly.position.z -= centre.z;
-  assembly.position.y -= bounds.min.y;
+  assembly.position.y -= computeStructuralBaseY(assembly);
 
   // The focus box was computed in pre-centering local space. Convert it to
   // world space now so the shared camera framer looks at the actual model
@@ -331,6 +479,28 @@ function prepareHighModel(assembly: THREE.Group): void {
   }
 
   assembly.updateMatrixWorld(true);
+
+  // Source-scene annex sweep: the master drags a strip of unrelated buildings
+  // along the front-left plaza edge (centre distance > 24 m). They are not
+  // part of the real complex and sit half-sunken at the rim, so drop them —
+  // centre-based so the podium's own corner-reaching slabs stay safe.
+  const annexes: THREE.Mesh[] = [];
+  assembly.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return;
+    const centre = box.getCenter(new THREE.Vector3());
+    if (Math.hypot(centre.x, centre.z) > 24) annexes.push(object);
+  });
+  if (annexes.length > 0) {
+    for (const mesh of annexes) {
+      mesh.parent?.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    console.info(`[Tengwang] Removed ${annexes.length} out-of-complex annex mesh(es) beyond r=24.`);
+  }
+
+  assembly.updateMatrixWorld(true);
 }
 
 // DEBUG override: replace all high-precision materials with a simple opaque
@@ -349,76 +519,78 @@ function applyDebugMaterialOverride(assembly: THREE.Group): void {
   console.warn('[Tengwang] Applied debug material override (opaque red, DoubleSide).');
 }
 
+type TengwangStage = { url: string; lod: string; source: string; plaques: boolean };
+
 export function createTengwangTowerHighModel(loadOptions: PavilionModelLoadOptions = {}): THREE.Group {
   const root = new THREE.Group();
   root.name = 'tengwang-highmodel-root';
-  console.log('[Tengwang] Creating high model root');
-  const runtimeLod = selectAvailableLod(TENGWANG_LODS);
-  root.userData.runtimeLod = runtimeLod;
-  const fallbackSpec = PAVILION_SPECS.find((spec) => spec.id === 'tengwang');
   root.userData.sculptRuntime = { nodes: { root }, meshes: {}, sockets: {}, colliders: {}, destructionGroups: { tower: [] } };
 
-  const promise = loadVerifiedGlb(TENGWANG_HIGH_PRECISION_GLB, loadOptions);
-  console.log('[Tengwang] Loading high-precision GLB:', TENGWANG_HIGH_PRECISION_GLB);
-  promise
-    .then((gltf) => {
-      console.log('[Tengwang] High-precision GLB loaded');
-      const assembly = gltf.scene;
-      assembly.name = 'tengwang-highmodel-admitted-core';
-      root.userData.runtimeLod = 'lod0hp';
-      prepareHighModel(assembly);
-      registerPavilionAssembly(root, assembly, 'tengwang');
-      root.add(assembly);
-      if (assembly.userData.focusBounds instanceof THREE.Box3) {
-        root.userData.focusBounds = assembly.userData.focusBounds;
-      }
-      root.userData.highModelReady = true;
-      root.userData.highModelSource = 'high-precision';
-      console.log('[Tengwang] High-precision model ready (add before register)');
-      window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'tengwang' }));
-    })
-    .catch((highPrecisionError: unknown) => {
-      if (isAbortError(highPrecisionError)) return;
-      console.warn('Tengwang high-precision GLB failed, falling back to semantic GLB.', highPrecisionError);
-      return loadVerifiedGlb(TENGWANG_SEMANTIC_GLB, loadOptions).then((gltf) => {
-        console.log('[Tengwang] Semantic GLB loaded');
+  // Asset selection. The 滕王阁 complex is the showpiece — the 426MB high-
+  // precision master runs on hero AND standard desktops (quality complaints
+  // about the decimated semantic LODs outweighed the download); only the
+  // mobile tier degrades to the small semantic GLB. ?lod= still forces a tier
+  // and every stage falls back to the next on failure.
+  const forcedLod = new URLSearchParams(window.location.search).get('lod');
+  const qualityId = detectDeviceQualityProfile().id;
+  const useHighPrecision = qualityId !== 'mobile' && !forcedLod;
+  const preferredLod = selectAvailableLod(TENGWANG_LODS);
+  root.userData.runtimeLod = useHighPrecision ? 'lod0hp' : preferredLod;
+  const fallbackSpec = PAVILION_SPECS.find((spec) => spec.id === 'tengwang');
+  const stages: TengwangStage[] = useHighPrecision
+    ? [
+        { url: TENGWANG_HIGH_PRECISION_GLB, lod: 'lod0hp', source: 'high-precision', plaques: true },
+        { url: TENGWANG_LODS.lod0, lod: 'lod0', source: 'semantic-hierarchy', plaques: true },
+        { url: TENGWANG_LODS.lod1, lod: 'lod1', source: 'lod1-fallback', plaques: false },
+      ]
+    : [
+        { url: TENGWANG_LODS[preferredLod], lod: preferredLod, source: preferredLod === 'lod0' ? 'semantic-hierarchy' : `${preferredLod}-tier`, plaques: true },
+        ...(preferredLod !== 'lod2'
+          ? [{ url: TENGWANG_LODS.lod2, lod: 'lod2', source: 'lod2-fallback', plaques: false } satisfies TengwangStage]
+          : []),
+      ];
+  let stageIndex = 0;
+
+  const loadStage = (): void => {
+    const stage = stages[stageIndex++];
+    loadVerifiedGlb(stage.url, loadOptions)
+      .then(async (gltf) => {
         const assembly = gltf.scene;
         assembly.name = 'tengwang-highmodel-admitted-core';
-        root.userData.runtimeLod = 'lod0';
+        root.userData.runtimeLod = stage.lod;
         prepareHighModel(assembly);
+        // Precision-budgeted decimation + material merge — high-precision
+        // stages only; the small semantic LODs are already lean.
+        if (stage.source === 'high-precision') {
+          const budget = await admitHighPrecisionBudget(assembly);
+          const drawMeshes = mergeAssemblyByMaterial(assembly);
+          console.info(`[Tengwang] ${budget}; merged to ${drawMeshes} draw meshes.`);
+        }
         registerPavilionAssembly(root, assembly, 'tengwang');
         if (assembly.userData.focusBounds instanceof THREE.Box3) {
           root.userData.focusBounds = assembly.userData.focusBounds;
+          if (stage.plaques) attachPlaques(root, assembly.userData.focusBounds);
         }
         root.add(assembly);
         root.userData.highModelReady = true;
-        root.userData.highModelSource = 'semantic-hierarchy';
-        console.log('[Tengwang] Semantic GLB ready');
+        root.userData.highModelSource = stage.source;
+        console.log(`[Tengwang] Stage ready: ${stage.source} (${stage.url})`);
         window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'tengwang' }));
-      });
-    })
-    .catch((semanticError: unknown) => {
-      if (isAbortError(semanticError)) return;
-      console.warn('Tengwang semantic GLB failed to load, falling back to LOD0.', semanticError);
-      return loadVerifiedGlb(TENGWANG_LODS.lod0, loadOptions).then((gltf) => {
-        const assembly = gltf.scene;
-        assembly.name = 'tengwang-highmodel-admitted-core';
-        root.userData.runtimeLod = 'lod0hp';
-        prepareHighModel(assembly);
-        root.add(assembly);
-        root.userData.highModelReady = true;
-        root.userData.highModelSource = 'lod0-fallback';
-        console.log('[Tengwang] LOD0 fallback ready');
+      })
+      .catch((error: unknown) => {
+        if (isAbortError(error)) return;
+        if (stageIndex < stages.length) {
+          console.warn(`Tengwang GLB ${stage.url} failed, degrading.`, error);
+          loadStage();
+          return;
+        }
+        root.userData.highModelReady = false;
+        root.userData.highModelLoadError = true;
+        root.userData.highModelLoadErrorReason = 'asset-fetch-or-parse-failed';
         window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'tengwang' }));
+        console.error('Tengwang runtime GLB failed to load.', error);
       });
-    })
-    .catch((error: unknown) => {
-      if (isAbortError(error)) return;
-      root.userData.highModelReady = false;
-      root.userData.highModelLoadError = true;
-      root.userData.highModelLoadErrorReason = 'asset-fetch-or-parse-failed';
-      window.dispatchEvent(new CustomEvent('china-towers-model-ready', { detail: 'tengwang' }));
-      console.error('Tengwang runtime GLB failed to load.', error);
-    });
+  };
+  loadStage();
   return root;
 }

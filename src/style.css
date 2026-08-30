@@ -10,6 +10,11 @@
   font-synthesis: none;
 }
 * { box-sizing: border-box; }
+/* Right-hand HUD gutter: relaxes to the viewport edge while the poetry drawer
+   is closed, widens to clear the 370px panel while it is open (poetryPanel.ts
+   toggles body.poetry-open). */
+:root { --hud-gutter: 26px; }
+body.poetry-open { --hud-gutter: 418px; }
 html, body, #scene { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; background: #dfe6e2; }
 button { font: inherit; }
@@ -29,7 +34,9 @@ h1 { margin: 0; font-size: 76px; font-weight: 500; line-height: .9; letter-spaci
 .english { margin: 16px 0 0; font-size: 11px; font-weight: 800; letter-spacing: .2em; }
 .location { margin: 14px 0 0; color: color-mix(in srgb, var(--accent) 78%, #46392e); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
 .description { margin: 14px 0 0; color: #62584e; font-size: 13px; line-height: 1.75; }
-.scene-reading { position: absolute; left: 6vw; bottom: 146px; width: min(410px, 38vw); padding: 14px 18px 15px 16px; border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(247,246,239,.72), rgba(247,246,239,.22)); backdrop-filter: blur(5px); pointer-events: auto; z-index: 4; }
+.scene-reading { position: absolute; left: 6vw; bottom: 146px; width: min(410px, 38vw); padding: 14px 18px 15px 16px; border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(247,246,239,.72), rgba(247,246,239,.22)); backdrop-filter: blur(5px); pointer-events: auto; z-index: 4; opacity: 0; transform: translateY(10px); transition: opacity .45s ease, transform .45s ease; }
+.scene-reading.is-visible { opacity: 1; transform: translateY(0); }
+.scene-cue-buttons { position: absolute; left: 6vw; bottom: 112px; pointer-events: auto; z-index: 5; }
 .scene-reading-kicker { margin: 0 0 7px; color: var(--accent); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .scene-reading-anchor { margin: 0 0 5px; color: #776653; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
 .scene-reading h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.25; }
@@ -42,7 +49,7 @@ h1 { margin: 0; font-size: 76px; font-weight: 500; line-height: .9; letter-spaci
 .scene-reading-card blockquote { margin: 0; padding-left: 11px; border-left: 2px solid var(--accent); color: #3e342b; font-size: 16px; line-height: 1.8; }
 .scene-reading-panel-note { margin: 8px 0 0; color: #62584e; font-size: 12px; line-height: 1.75; }
 .scene-provenance { margin: 12px 0 18px; color: #897b6c; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; line-height: 1.6; letter-spacing: .02em; }
-.pavilion-nav { position: absolute; top: 54px; right: 418px; width: 184px; display: grid; gap: 5px; pointer-events: auto; }
+.pavilion-nav { position: absolute; top: 54px; right: var(--hud-gutter); width: 184px; display: grid; gap: 5px; pointer-events: auto; transition: right .28s ease; }
 .pavilion-nav button { display: flex; gap: 12px; align-items: center; border: 0; border-left: 2px solid rgba(55,45,36,.17); padding: 10px 11px; background: rgba(242,243,237,.38); color: #62584d; text-align: left; cursor: pointer; font-size: 12px; transition: .2s ease; }
 .pavilion-nav button b { color: #998a78; font-size: 9px; letter-spacing: .12em; }
 .pavilion-nav button:hover, .pavilion-nav button.is-active { border-left-color: var(--accent); background: rgba(255,255,251,.82); color: var(--ink); transform: translateX(-3px); }
@@ -51,12 +58,13 @@ h1 { margin: 0; font-size: 76px; font-weight: 500; line-height: .9; letter-spaci
 .controls button { border: 1px solid rgba(65,53,42,.25); background: rgba(247,246,239,.76); color: #3d332a; padding: 10px 13px; cursor: pointer; font-size: 11px; letter-spacing: .04em; transition: .2s ease; }
 .controls button:first-child { border-color: var(--accent); color: #342216; }
 .controls button:hover { background: #fffef8; transform: translateY(-2px); }
-.model-meta { position: absolute; right: 418px; bottom: 84px; display: grid; gap: 6px; pointer-events: none; padding: 10px 12px; background: rgba(242,243,237,.58); border: 1px solid var(--line); }
+.controls button[aria-pressed="true"] { border-color: var(--accent); background: rgba(255,250,235,.9); color: #342216; }
+.model-meta { position: absolute; right: var(--hud-gutter); bottom: 84px; display: grid; gap: 6px; pointer-events: none; padding: 10px 12px; background: rgba(242,243,237,.58); border: 1px solid var(--line); transition: right .28s ease; }
 .meta-row { display: flex; gap: 10px; align-items: baseline; }
 .meta-key { font-size: 9px; font-weight: 800; letter-spacing: .16em; color: #776653; min-width: 50px; }
 .meta-value { font-size: 11px; font-weight: 700; color: #3d332a; }
-.status { position: absolute; right: 418px; bottom: 56px; margin: 0; color: #776653; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
-footer { position: absolute; right: 418px; bottom: 26px; color: #877967; font-size: 10px; letter-spacing: .05em; display: flex; gap: 14px; }
+.status { position: absolute; right: var(--hud-gutter); bottom: 56px; margin: 0; color: #776653; font-size: 9px; font-weight: 800; letter-spacing: .15em; transition: right .28s ease; }
+footer { position: absolute; right: var(--hud-gutter); bottom: 26px; color: #877967; font-size: 10px; letter-spacing: .05em; display: flex; gap: 14px; transition: right .28s ease; }
 .poetry-panel { position: absolute; top: 24px; right: 24px; bottom: 24px; width: 370px; display: flex; flex-direction: column; pointer-events: auto; background: var(--paper); border: 1px solid rgba(61,53,44,.2); box-shadow: 0 18px 50px rgba(53,48,42,.16); backdrop-filter: blur(10px); transition: transform .28s ease, opacity .28s ease; z-index: 10; }
 .poetry-panel:not(.is-open) { transform: translateX(calc(100% + 28px)); opacity: 0; pointer-events: none; }
 .poetry-panel-head { display: flex; justify-content: space-between; gap: 16px; padding: 22px 22px 16px; border-bottom: 1px solid var(--line); }
@@ -86,19 +94,18 @@ details p { color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, s
 .empty-content { color: var(--muted); font-size: 13px; line-height: 1.8; }
 @media (max-width: 980px) {
   .poetry-panel { width: 340px; }
-  .pavilion-nav { right: 366px; }
-  .status, footer { right: 366px; }
+  body.poetry-open { --hud-gutter: 366px; }
 }
 @media (max-width: 700px) {
   .intro { top: 24px; left: 20px; max-width: 250px; }
   h1 { font-size: 52px; }
   .description { max-width: 230px; font-size: 11px; }
-  .scene-reading { left: 18px; right: 18px; bottom: 82px; width: auto; max-width: none; padding: 10px 12px 11px; background: linear-gradient(90deg, rgba(247,246,239,.8), rgba(247,246,239,.32)); }
+  .scene-reading { left: 18px; right: 18px; bottom: 118px; width: auto; max-width: none; padding: 10px 12px 11px; background: linear-gradient(90deg, rgba(247,246,239,.8), rgba(247,246,239,.32)); }
   .scene-reading h2 { font-size: 22px; }
   .scene-reading-line { font-size: 15px; }
   .scene-reading-observation { max-width: 280px; font-size: 11px; }
   .scene-reading-anchor { font-size: 8px; }
-  .scene-cue-buttons { max-width: 330px; margin-top: 9px; }
+  .scene-cue-buttons { position: absolute; left: 18px; bottom: 84px; max-width: 330px; margin-top: 0; }
   .scene-cue-buttons button { padding: 5px 7px; font-size: 9px; }
   .pavilion-nav { top: 166px; right: 16px; bottom: auto; width: 142px; gap: 3px; z-index: 12; }
   .pavilion-nav button { padding: 7px 8px; font-size: 10px; background: rgba(243,244,238,.62); }
