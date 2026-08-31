@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import type { PavilionId } from '../createPavilionGalleryModel';
@@ -52,7 +54,7 @@ type TowerSky = {
   // Visible sun disc: world-unit size at the 1600m placement, colour and HDR
   // intensity per tower. Tengwang's dusk carries the 正赤如丹 vermilion disc,
   // flattened onto the water-sky line via diskDirection.
-  sunDisk: { size: number; color: string; intensity: number };
+  sunDisk: { size: number; color: string; intensity: number; soft?: boolean };
   diskDirection?: [number, number, number];
   backgroundIntensity: number;
   // Per-tower tone-mapping exposure: the dawn lake needs less than the
@@ -115,7 +117,7 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunColor: '#ffbe82', sunIntensity: 2.3,
     cloudColor: '#f2c4a2',
     // 正赤如丹: a large vermilion disc flattened onto the water-sky junction.
-    sunDisk: { size: 380, color: '#f04a14', intensity: 6.8 },
+    sunDisk: { size: 380, color: '#f04a14', intensity: 6.8, soft: true },
     diskDirection: [-0.85, 0.024, -0.35],
     backgroundIntensity: 1.08,
     exposure: 1.05,
@@ -882,7 +884,59 @@ function createLandscape(
 // Animated details: bird flock (孤鹜/雁阵), boat bobbing, lantern breathing.
 // ---------------------------------------------------------------------------
 
-type BirdFlock = { group: THREE.Group; update: (elapsed: number) => void };
+type BirdFlock = { group: THREE.Group; update: (elapsed: number, deltaSeconds: number) => void };
+
+// 官方高精飞鹳 (three.js Stork.glb, Draco 压缩): 专业建模 + 自带扇翅飞行动画,
+// 作为孤鹜的具象载体; 程序化剪影鸟仅在加载失败时回退。
+let storkLoader: GLTFLoader | null = null;
+function loadStork(onDone: (gltf: { scene: THREE.Group; animations: THREE.AnimationClip[] }) => void, onError: () => void): void {
+  if (!storkLoader) {
+    storkLoader = new GLTFLoader();
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('/assets/draco/');
+    storkLoader.setDRACOLoader(draco);
+  }
+  storkLoader.load('/assets/bird/stork.glb', onDone, undefined, onError);
+}
+
+type BirdRecord = {
+  pivot: THREE.Group;
+  right: THREE.Mesh | null;
+  left: THREE.Mesh | null;
+  phase: number;
+  mixer?: THREE.AnimationMixer;
+};
+
+function buildProceduralWings(material: THREE.MeshBasicMaterial, wingSpan: number): { right: THREE.Mesh; left: THREE.Mesh } {
+  const wingGeometry = new THREE.BufferGeometry();
+  wingGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0.3, 0, 0.14,   -0.4, 0, 0.24,   0.05, 0.1, wingSpan * 0.62,
+    -0.4, 0, 0.24,  -0.12, 0.14, wingSpan,   0.05, 0.1, wingSpan * 0.62,
+  ]), 3));
+  wingGeometry.computeVertexNormals();
+  const right = new THREE.Mesh(wingGeometry, material);
+  const left = new THREE.Mesh(wingGeometry, material);
+  left.scale.z = -1;
+  return { right, left };
+}
+
+function buildProceduralSoloBird(pivot: THREE.Group, s: number, material: THREE.MeshBasicMaterial): { right: THREE.Mesh; left: THREE.Mesh } {
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), material);
+  body.scale.set(2.05 * s, 0.42 * s, 0.5 * s);
+  pivot.add(body);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07 * s, 0.15 * s, 0.6 * s, 6), material);
+  neck.position.set(0.9 * s, 0.3 * s, 0);
+  neck.rotation.z = -0.75;
+  pivot.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16 * s, 8, 6), material);
+  head.position.set(1.34 * s, 0.56 * s, 0);
+  pivot.add(head);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.2 * s, 0.85 * s, 6), material);
+  tail.position.set(-1.1 * s, 0.1 * s, 0);
+  tail.rotation.z = Math.PI / 2 + 0.22;
+  pivot.add(tail);
+  return buildProceduralWings(material, 1.55 * s);
+}
 
 function createBirdFlock(count: number, options: { solo?: boolean } = {}): BirdFlock {
   const solo = options.solo === true;
@@ -890,51 +944,44 @@ function createBirdFlock(count: number, options: { solo?: boolean } = {}): BirdF
   group.name = solo ? 'poetic-solo-duck' : 'poetic-bird-flock';
   const material = new THREE.MeshBasicMaterial({ color: 0x2c2521, side: THREE.DoubleSide, fog: false });
   const flapSpeed = solo ? 3.4 : 7.5;
-  const birds: Array<{ pivot: THREE.Group; right: THREE.Mesh; left: THREE.Mesh; phase: number }> = [];
+  const birds: BirdRecord[] = [];
   for (let index = 0; index < count; index += 1) {
     const pivot = new THREE.Group();
-    const s = solo ? 2.1 : 1;
+    const bird: BirdRecord = { pivot, right: null, left: null, phase: index * 1.31 };
     if (solo) {
-      // 孤鹜: 身躯 + 头颈 + 尾 + 分段双翼, 剪影在落霞前也读得出鸟形。
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), material);
-      body.scale.set(2.05 * s, 0.42 * s, 0.5 * s);
-      pivot.add(body);
-      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07 * s, 0.15 * s, 0.6 * s, 6), material);
-      neck.position.set(0.9 * s, 0.3 * s, 0);
-      neck.rotation.z = -0.75;
-      pivot.add(neck);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.16 * s, 8, 6), material);
-      head.position.set(1.34 * s, 0.56 * s, 0);
-      pivot.add(head);
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.2 * s, 0.85 * s, 6), material);
-      tail.position.set(-1.1 * s, 0.1 * s, 0);
-      tail.rotation.z = Math.PI / 2 + 0.22;
-      pivot.add(tail);
+      // 官方 Stork 模型: 模型 +z 前向旋转到世界 +x 航向, 自带扇翅动画循环。
+      void loadStork((gltf) => {
+        const model = gltf.scene;
+        model.scale.setScalar(2.1);
+        model.rotation.y = Math.PI / 2;
+        model.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
+        pivot.add(model);
+        if (gltf.animations.length > 0) {
+          bird.mixer = new THREE.AnimationMixer(model);
+          bird.mixer.clipAction(gltf.animations[0]).play();
+        }
+      }, () => {
+        const wings = buildProceduralSoloBird(pivot, 2.1, material);
+        bird.right = wings.right;
+        bird.left = wings.left;
+      });
+    } else {
+      const wings = buildProceduralWings(material, 1.05);
+      bird.right = wings.right;
+      bird.left = wings.left;
+      // V formation trailing behind the leader.
+      const rank = Math.ceil(index / 2);
+      const side = index % 2 === 0 ? 1 : -1;
+      pivot.position.set(-rank * 1.7, -rank * 0.18, side * rank * 1.1);
     }
-    // 双翼: 沿 ±z 展开的收窄翼面 (root 弦 → 外段前缘), 绕 x 轴扇展。
-    const wingSpan = (solo ? 1.55 : 1.05) * (s === 1 ? 1 : s);
-    const wingGeometry = new THREE.BufferGeometry();
-    wingGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-      0.3, 0, 0.14,   -0.4, 0, 0.24,   0.05, 0.1, wingSpan * 0.62,
-      -0.4, 0, 0.24,  -0.12, 0.14, wingSpan,   0.05, 0.1, wingSpan * 0.62,
-    ]), 3));
-    wingGeometry.computeVertexNormals();
-    const right = new THREE.Mesh(wingGeometry, material);
-    const left = new THREE.Mesh(wingGeometry, material);
-    left.scale.z = -1;
-    pivot.add(right, left);
-    // V formation trailing behind the leader.
-    const rank = Math.ceil(index / 2);
-    const side = index % 2 === 0 ? 1 : -1;
-    pivot.position.set(-rank * 1.7, -rank * 0.18, side * rank * 1.1);
     pivot.userData.phase = index * 1.31;
     group.add(pivot);
-    birds.push({ pivot, right, left, phase: index * 1.31 });
+    birds.push(bird);
   }
   let baseX = -140;
   return {
     group,
-    update: (elapsed: number) => {
+    update: (elapsed: number, deltaSeconds: number) => {
       baseX += solo ? 0.01 : 0.016;
       if (baseX > 180) baseX = solo ? -120 : -200;
       if (solo) {
@@ -945,6 +992,11 @@ function createBirdFlock(count: number, options: { solo?: boolean } = {}): BirdF
         group.rotation.y = Math.PI * 0.04;
       }
       for (const bird of birds) {
+        if (bird.mixer) {
+          bird.mixer.update(deltaSeconds);
+          continue;
+        }
+        if (!bird.right || !bird.left) continue;
         // 扇展-滑翔节律: 振幅被慢周期包络调制, 峰值间翼面回到上扬滑翔位。
         const envelope = solo ? Math.max(0.15, Math.sin(elapsed * 0.85 + bird.phase) ** 2) : 1;
         const flap = Math.sin(elapsed * flapSpeed + bird.phase) * envelope + (solo ? 0.18 : 0);
@@ -1254,14 +1306,11 @@ export function createSceneEnvironment(
   sunsetBank.visible = false;
   root.add(sunsetBank);
 
-  // --- Visible sun disc (太阳具象) ---------------------------------------
-  // HDR-driven additive quad parked 1600m along the tower's sun vector each
-  // frame. Tengwang's is flattened to the horizon and vermilion (正赤如丹);
-  // HDR intensity > bloom threshold so it actually glows.
-  const sunDiskMaterial = new THREE.ShaderMaterial({
+  // --- 地平线辉光: 落日方位的暖光过渡带, 让日轮与水天交界融为一体 ------
+  const horizonGlowMaterial = new THREE.ShaderMaterial({
     uniforms: {
-      uColor: { value: new THREE.Color('#ffedb0') },
-      uIntensity: { value: 3 },
+      uColor: { value: new THREE.Color('#ff8a4a') },
+      uIntensity: { value: 0 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -1275,11 +1324,51 @@ export function createSceneEnvironment(
       uniform float uIntensity;
       varying vec2 vUv;
       void main() {
+        // 横向余弦聚在落日方位, 纵向贴地平线向上衰减。
+        float lateral = pow(max(0.0, 1.0 - abs(vUv.x - 0.5) * 2.0), 2.2);
+        float vertical = pow(1.0 - vUv.y, 1.6);
+        gl_FragColor = vec4(uColor * (lateral * vertical * uIntensity), 1.0);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const horizonGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), horizonGlowMaterial);
+  horizonGlow.name = 'poetic-horizon-glow';
+  horizonGlow.renderOrder = 1;
+  root.add(horizonGlow);
+
+  // --- Visible sun disc (太阳具象) ---------------------------------------
+  // HDR-driven additive quad parked 1600m along the tower's sun vector each
+  // frame. Tengwang's is flattened to the horizon and vermilion (正赤如丹);
+  // HDR intensity > bloom threshold so it actually glows.
+  const sunDiskMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color('#ffedb0') },
+      uIntensity: { value: 3 },
+      uSoft: { value: 0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uIntensity;
+      uniform float uSoft;
+      varying vec2 vUv;
+      void main() {
         float r = length(vUv - 0.5) * 2.0;
         // 硬边缘圆盘: 一轮明确的日面, 白热中心, 光晕收紧不散成泛白。
-        float disc = 1.0 - smoothstep(0.26, 0.30, r);
-        float whiteHot = smoothstep(0.18, 0.02, r);
-        float halo = pow(max(0.0, 1.0 - r), 3.2) * 0.3;
+        float inner = mix(0.22, 0.34, uSoft);
+        float edge = mix(0.26, 0.56, uSoft);
+        float disc = 1.0 - smoothstep(inner, edge, r);
+        float whiteHot = smoothstep(mix(0.18, 0.3, uSoft), 0.02, r);
+        float halo = pow(max(0.0, 1.0 - r), uSoft > 0.5 ? 2.2 : 3.2) * mix(0.3, 0.5, uSoft);
         vec3 body = mix(uColor, vec3(1.6, 1.35, 1.05), whiteHot) * uIntensity;
         gl_FragColor = vec4(body * disc + uColor * halo * uIntensity * 0.4, 1.0);
       }
@@ -1586,9 +1675,22 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       sunDirTmp.set(diskDirection[0], diskDirection[1], diskDirection[2]).normalize();
       sunDisk.position.copy(camera.position).addScaledVector(sunDirTmp, 1600);
       sunDisk.quaternion.copy(camera.quaternion);
-      sunDisk.scale.setScalar(skyConfig.sunDisk.size);
+      if (skyConfig.sunDisk.soft) {
+        sunDisk.scale.set(skyConfig.sunDisk.size * 1.12, skyConfig.sunDisk.size * 0.88, 1);
+        sunDiskMaterial.uniforms.uSoft.value = 1;
+      } else {
+        sunDisk.scale.setScalar(skyConfig.sunDisk.size);
+        sunDiskMaterial.uniforms.uSoft.value = 0;
+      }
       sunDiskMaterial.uniforms.uColor.value.set(skyConfig.sunDisk.color);
       sunDiskMaterial.uniforms.uIntensity.value = skyConfig.sunDisk.intensity;
+      // 辉光幕竖在落日方位的地平线上, 只在低日轮楼 (滕王) 亮起。
+      const glowStrength = skyConfig.sunDisk.soft ? 0.85 : 0;
+      horizonGlowMaterial.uniforms.uColor.value.set(skyConfig.sunDisk.color);
+      horizonGlowMaterial.uniforms.uIntensity.value = glowStrength;
+      horizonGlow.position.set(sunDisk.position.x, 30, sunDisk.position.z);
+      horizonGlow.quaternion.copy(camera.quaternion);
+      horizonGlow.scale.set(skyConfig.sunDisk.size * 6.5, skyConfig.sunDisk.size * 1.6, 1);
     }
     if (water && !document.hidden) {
       const uniforms = (water.material as THREE.ShaderMaterial).uniforms;
@@ -1619,7 +1721,7 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       boat.position.y = WATER_Y + 0.12 + Math.sin(elapsed * 0.7 + boat.position.x) * 0.07;
       boat.rotation.z = Math.sin(elapsed * 0.55 + boat.position.z) * 0.025;
     }
-    if (birdFlock.group.visible) birdFlock.update(elapsed);
+    if (birdFlock.group.visible) birdFlock.update(elapsed, deltaSeconds);
     const lanternGlow = 0.5 + Math.sin(elapsed * 1.8) * 0.18;
     for (const glow of glowMaterials) glow.emissiveIntensity = lanternGlow;
     // Halo opacity rides the same breath as the emissive lanterns.
