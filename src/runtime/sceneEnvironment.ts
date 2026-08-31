@@ -952,8 +952,14 @@ function createBirdFlock(count: number, options: { solo?: boolean } = {}): BirdF
       // 官方 Stork 模型: 模型 +z 前向旋转到世界 +x 航向, 自带扇翅动画循环。
       void loadStork((gltf) => {
         const model = gltf.scene;
-        model.scale.setScalar(2.1);
+        // 该资产原始建模比例巨大 (~1500 单位): 按包围盒归一化到真实鸟尺寸。
+        const raw = new THREE.Box3().setFromObject(model);
+        const rawSpan = Math.max(raw.max.x - raw.min.x, raw.max.y - raw.min.y, raw.max.z - raw.min.z) || 1;
+        model.scale.setScalar(2.4 / rawSpan);
         model.rotation.y = Math.PI / 2;
+        const centred = new THREE.Box3().setFromObject(model);
+        const centre = centred.getCenter(new THREE.Vector3());
+        model.position.sub(centre);
         model.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
         pivot.add(model);
         if (gltf.animations.length > 0) {
