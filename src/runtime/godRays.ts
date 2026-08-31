@@ -93,6 +93,7 @@ export class GodRaysPass extends Pass {
   private readonly excluded: THREE.Object3D[] = [];
   private readonly clearColor = new THREE.Color();
   private strength = 0.8;
+  private active = true;
 
   constructor(scene: THREE.Scene, camera: THREE.Camera, renderer: THREE.WebGLRenderer, width: number, height: number) {
     super();
@@ -136,7 +137,17 @@ export class GodRaysPass extends Pass {
 
   setStrength(strength: number): void {
     this.strength = strength;
-    this.enabled = strength > 0.01;
+    this.updateEnabled();
+  }
+
+  /** Pause the whole pass (e.g. while the camera is moving). */
+  setActive(active: boolean): void {
+    this.active = active;
+    this.updateEnabled();
+  }
+
+  private updateEnabled(): void {
+    this.enabled = this.active && this.strength > 0.01;
   }
 
   setExcluded(objects: Array<THREE.Object3D | null>): void {

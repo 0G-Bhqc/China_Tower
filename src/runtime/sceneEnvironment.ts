@@ -1214,12 +1214,13 @@ export function createSceneEnvironment(
         const moved = !throttlePrimed || throttleCam.distanceTo(throttlePrev) > 0.02;
         throttlePrev.copy(throttleCam);
         throttlePrimed = true;
-        if (!moved) {
-          lastReflection = !lastReflection;
-          if (!lastReflection) return;
-        } else {
+        // 移动轻载: 相机运动中完全跳过反射 (整场景镜像重渲是最大逐帧负载),
+        // 运动中水面显示上一帧反射——快速移动下不可辨; 静止后恢复全帧率。
+        if (moved) {
           lastReflection = true;
+          return;
         }
+        lastReflection = false;
         baseOnBeforeRender.call(this, renderer, scene, camera, geometry, material, group);
       };
     }

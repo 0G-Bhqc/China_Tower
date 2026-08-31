@@ -154,6 +154,7 @@ export type PostStack = {
   setGrade: (preset: TowerGradePreset) => void;
   setMoodBias: (bias: { tint: [number, number, number]; exposure: number } | null) => void;
   setGodRays: (sunDirection: THREE.Vector3, strength: number, sunColor: string) => void;
+  setGodRaysActive: (active: boolean) => void;
   setGodRaysExcluded: (objects: Array<THREE.Object3D | null>) => void;
   setSize: (width: number, height: number) => void;
   render: () => void;
@@ -230,6 +231,9 @@ export function createPostStack(
     },
     setGodRaysExcluded: (objects: Array<THREE.Object3D | null>) => {
       godRaysPass?.setExcluded(objects);
+    },
+    setGodRaysActive: (active: boolean) => {
+      godRaysPass?.setActive(active);
     },
     setSize: (width: number, height: number) => {
       composer.setSize(width, height);

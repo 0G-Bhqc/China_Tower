@@ -430,6 +430,7 @@ let readingTimer: number | null = null;
 let sunMood: { color: string; intensity: number; ambient: string; ambientIntensity: number } | null = null;
 const sunTmpColor = new THREE.Color();
 const ambientTmpColor = new THREE.Color();
+const lastFrameCamPos = new THREE.Vector3();
 
 const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -876,7 +877,12 @@ function render() {
   const sunBlend = 1 - Math.exp(-frameDelta * 2.2);
   sunKey.color.lerp(sunTmpColor.set(sunTarget.color), sunBlend);
   sunKey.intensity += (sunTarget.intensity - sunKey.intensity) * sunBlend;
-  const hemi = lightRig.children.find((child): child is THREE.HemisphereLight => child instanceof THREE.HemisphereLight) ?? null;
+  // 相机运动轻载: 拖动/环绕时暂停 GodRays 通道 (整场景深度重渲是重负载),
+  // 静止后自动恢复——直接削掉移动中的帧尖峰。
+  const cameraMoved = camera.position.distanceTo(lastFrameCamPos) > 0.02;
+  lastFrameCamPos.copy(camera.position);
+  postStack?.setGodRaysActive(!cameraMoved);
+    const hemi = lightRig.children.find((child): child is THREE.HemisphereLight => child instanceof THREE.HemisphereLight) ?? null;
   if (hemi) {
     hemi.color.lerp(ambientTmpColor.set(sunTarget.ambient), sunBlend);
     hemi.intensity += (sunTarget.ambientIntensity - hemi.intensity) * sunBlend;
