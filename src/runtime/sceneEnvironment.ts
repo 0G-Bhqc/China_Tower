@@ -1195,7 +1195,12 @@ export function createSceneEnvironment(
     // the camera rarely sweeps fast enough to expose the lag.
     if (quality === 'standard') {
       const baseOnBeforeRender = water.onBeforeRender;
-      let reflectionFrame = 0;
+      // 运动感知节流: 镜头静止时隔帧省一半反射开销; 一旦移动立即全帧率,
+      // 否则滞后一帧的反射会在移动中读作明暗频闪。
+      let lastReflection = true;
+      const throttleCam = new THREE.Vector3();
+      const throttlePrev = new THREE.Vector3();
+      let throttlePrimed = false;
       water.onBeforeRender = function reflectThrottle(
         this: Water,
         renderer: THREE.WebGLRenderer,
@@ -1205,8 +1210,16 @@ export function createSceneEnvironment(
         material: THREE.Material,
         group: THREE.Group,
       ) {
-        reflectionFrame += 1;
-        if (reflectionFrame % 2 === 0) return;
+        throttleCam.setFromMatrixPosition(camera.matrixWorld);
+        const moved = !throttlePrimed || throttleCam.distanceTo(throttlePrev) > 0.02;
+        throttlePrev.copy(throttleCam);
+        throttlePrimed = true;
+        if (!moved) {
+          lastReflection = !lastReflection;
+          if (!lastReflection) return;
+        } else {
+          lastReflection = true;
+        }
         baseOnBeforeRender.call(this, renderer, scene, camera, geometry, material, group);
       };
     }
