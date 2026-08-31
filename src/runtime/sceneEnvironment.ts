@@ -55,6 +55,9 @@ type TowerSky = {
   sunDisk: { size: number; color: string; intensity: number };
   diskDirection?: [number, number, number];
   backgroundIntensity: number;
+  // Per-tower tone-mapping exposure: the dawn lake needs less than the
+  // dusk/clear skies, otherwise the frame washes to white.
+  exposure: number;
   backgroundRotationY: number;
   // Softens the equirect backdrop into aerial haze (岳阳's 晨雾) without
   // touching the IBL, which stays pin-sharp for PBR reflections.
@@ -74,7 +77,8 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunDisk: { size: 95, color: '#ffedb0', intensity: 2.2 },
     // Puts the HDR's open lake (not the shoreline cliff) behind the default
     // camera corridor; the cliff stays as a hazy far shore at the sides.
-    backgroundIntensity: 0.9,
+    backgroundIntensity: 0.78,
+    exposure: 0.93,
     backgroundRotationY: 2.4,
     // A whisper of backdrop softness keeps the 晨雾 mood without smearing the
     // far shore into mush.
@@ -95,6 +99,7 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     // Frames the HDRI's own 长江大桥 across the background; rotation 0 left
     // blurry riverbank foliage hanging over the water like curtains.
     backgroundIntensity: 1.0,
+    exposure: 1.02,
     backgroundRotationY: 1.75,
     backgroundBlurriness: 0,
     fallbackSky: { turbidity: 4.2, rayleigh: 1.2 },
@@ -112,7 +117,8 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     // 正赤如丹: a large vermilion disc flattened onto the water-sky junction.
     sunDisk: { size: 380, color: '#f04a14', intensity: 6.8 },
     diskDirection: [-0.85, 0.024, -0.35],
-    backgroundIntensity: 1.0,
+    backgroundIntensity: 1.08,
+    exposure: 1.05,
     backgroundRotationY: 0,
     backgroundBlurriness: 0.006,
     fallbackSky: { turbidity: 8, rayleigh: 2.4 },
@@ -1211,10 +1217,6 @@ export function createSceneEnvironment(
     if (layers?.mid) layers.mid.visible = midVisible;
   };
 
-  // --- Far cloud band ----------------------------------------------------
-  const cloudTexture = createCloudTexture();
-  const cloudBand = createCloudBand(root, quality, cloudTexture);
-
   // --- Bird flock (tengwang dusk; 落霞与孤鹜齐飞) ------------------------
   // One duck, not a formation — the line says 孤鹜, and a single silhouette
   // gliding across the sunset horizon is the whole image.
@@ -1227,6 +1229,7 @@ export function createSceneEnvironment(
   // the horizon where water and sky already merge — 熔金落霞 over 秋水.
   const sunsetBank = new THREE.Group();
   sunsetBank.name = 'poetic-sunset-bank';
+  const cloudTexture = createCloudTexture();
   const sunsetMaterial = new THREE.MeshBasicMaterial({
     map: cloudTexture,
     transparent: true,
@@ -1367,6 +1370,8 @@ export function createSceneEnvironment(
       // Full-strength backdrop: the photographic HDRI IS the distant scenery
       // (far shores, city skylines); dimming it reads as a washed-out print.
       scene.backgroundIntensity = config.backgroundIntensity;
+      // Per-tower exposure: dawn lakes wash out at the dusk-tuned default.
+      renderer.toneMappingExposure = config.exposure;
       scene.backgroundBlurriness = config.backgroundBlurriness;
     }
     scene.environment = environment;
@@ -1382,10 +1387,6 @@ export function createSceneEnvironment(
     }
     currentFog = new THREE.FogExp2(new THREE.Color(config.fogColor), config.fogDensity);
     scene.fog = currentFog;
-    for (const material of cloudBand.materials) {
-      material.color.set(config.cloudColor);
-      material.needsUpdate = true;
-    }
     // Sun light path: laid along the tower's sun azimuth from the plaza edge
     // toward the horizon, tinted and weighted by the disc config.
     const streakAzimuth = Math.atan2(config.sunDirection[0], config.sunDirection[2]);
@@ -1630,8 +1631,6 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       tree.rotation.z = Math.sin(elapsed * 0.85 + phase) * 0.014;
       tree.rotation.x = Math.cos(elapsed * 0.62 + phase * 1.7) * 0.01;
     }
-    // Cloud band drifts around the horizon once every ~26 minutes.
-    cloudBand.group.rotation.y = elapsed * 0.004;
   };
 
   return {
@@ -1667,7 +1666,6 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       rockMaterial.dispose();
       glowTexture.dispose();
       for (const halo of glowSpriteMaterials) halo.dispose();
-      for (const cloudMaterial of cloudBand.materials) cloudMaterial.dispose();
       sunsetMaterial.dispose();
       sunsetBank.traverse((object) => {
         if (object instanceof THREE.Mesh) object.geometry.dispose();
@@ -1679,9 +1677,6 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       sunStreakInner.geometry.dispose();
       sunStreakInnerMaterial.dispose();
       sunStreakTexture.dispose();
-      cloudBand.group.traverse((object) => {
-        if (object instanceof THREE.Mesh) object.geometry.dispose();
-      });
       cloudTexture.dispose();
       for (const landscape of fallbackLandscapes.values()) {
         for (const material of landscape.materials) material.dispose();

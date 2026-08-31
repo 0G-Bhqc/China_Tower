@@ -4,7 +4,6 @@ import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { needsSemanticRecolor, recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
 import { applySemanticRelief } from './runtime/semanticRelief';
-import { mergeAssemblyByMaterial } from './runtime/mergeAssemblyByMaterial';
 
 const HUANGHE_LODS: Record<RuntimeLod, string> = {
   lod0: '/assets/huanghe-main-tower-highmodel.glb',
@@ -105,9 +104,6 @@ function prepareHighModel(assembly: THREE.Group): void {
   assembly.position.z -= centre.z;
   assembly.position.y -= bounds.min.y;
   assembly.updateMatrixWorld(true);
-  // 材质合并: 同滕王阁管线, 压低 draw call 与遍历成本。
-  const mergedMeshes = mergeAssemblyByMaterial(assembly);
-  if (mergedMeshes < 60) console.info(`[Huanghe] merged to ${mergedMeshes} draw meshes`);
 }
 
 export function createHuangheTowerHighModel(loadOptions: PavilionModelLoadOptions = {}): THREE.Group {
