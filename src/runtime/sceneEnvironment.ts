@@ -1356,7 +1356,7 @@ export function createSceneEnvironment(
   });
   const horizonGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), horizonGlowMaterial);
   horizonGlow.name = 'poetic-horizon-glow';
-  horizonGlow.renderOrder = 1;
+  horizonGlow.renderOrder = 4;
   root.add(horizonGlow);
 
   // --- Visible sun disc (太阳具象) ---------------------------------------
@@ -1399,7 +1399,7 @@ export function createSceneEnvironment(
   });
   const sunDisk = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunDiskMaterial);
   sunDisk.name = 'poetic-sun-disc';
-  sunDisk.renderOrder = 2;
+  sunDisk.renderOrder = 5;
   root.add(sunDisk);
 
   // --- Sun light path on the water (阳光反射光路) ------------------------

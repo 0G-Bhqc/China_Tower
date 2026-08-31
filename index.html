@@ -6,6 +6,16 @@
     <meta name="theme-color" content="#e4e8e2" />
     <meta name="description" content="三座经 DCC 高模解析的中国楼阁 Three.js 展示" />
     <title>中国楼阁 · 高模 3D 藏品</title>
+    <style>
+      /* 关键首屏样式内联: dev 模式下样式表按需注入, 模块链加载完成前
+         页面会以裸 HTML 闪现——这段保证首帧就是完整的加载页。 */
+      html, body { margin: 0; height: 100%; background: #dfe6e2; overflow: hidden; }
+      .loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(223,230,226,.97); z-index: 50; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; color: #201a16; text-align: center; }
+      .loader-brand { font-size: 44px; letter-spacing: .12em; }
+      .loader-sub, .loader-status { margin-top: 8px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: #776653; }
+      .loader-track { margin: 18px auto 0; width: 220px; height: 2px; background: rgba(55,45,36,.14); overflow: hidden; }
+      .loader-bar { height: 100%; width: 0%; background: #d58b42; transition: width .25s ease; }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -24,7 +34,7 @@
       </div>
     </div>
 
-    <main class="shell">
+    <main class="shell" style="display:none" data-shell-deferred>
       <header class="intro">
         <p class="eyebrow">THREE VERIFIED DCC HIGH MODELS</p>
         <h1 id="tower-title">岳阳楼</h1>
@@ -73,7 +83,7 @@
       </footer>
     </main>
 
-    <aside class="poetry-panel" id="poetry-panel" aria-label="诗文面板" aria-hidden="true">
+    <aside class="poetry-panel" id="poetry-panel" aria-label="诗文面板" aria-hidden="true" style="visibility:hidden" data-panel-deferred>
       <header class="poetry-panel-head">
         <div>
           <p class="panel-kicker">CLASSIC TEXTS · 古诗文</p>

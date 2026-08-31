@@ -764,6 +764,11 @@ window.addEventListener('china-towers-model-ready', (event) => {
     if (window.__CHINA_TOWERS_UI__) {
       window.__CHINA_TOWERS_UI__.setLoaderVisible(false);
     }
+    // 样式表就绪后揭示延迟显示的 HUD (shell + 诗文面板), 避免裸样式闪现。
+    requestAnimationFrame(() => {
+      document.querySelector('[data-shell-deferred')?.removeAttribute('style');
+      document.querySelector('[data-panel-deferred')?.removeAttribute('style');
+    });
     if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
       const assemblyRuntime = getPavilionAssemblyRuntime(activeModel);
       window.__CHINA_TOWERS_DIAGNOSTICS__.ready = true;
