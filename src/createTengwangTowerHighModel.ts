@@ -478,6 +478,35 @@ function prepareHighModel(assembly: THREE.Group): void {
     console.warn('[Tengwang] Model bounds are too small, model may not be visible');
   }
 
+  // 台基薄板分级微抬升: logarithmicDepthBuffer 下 polygonOffset 无效,
+  // 叠放共面石板在移动视角下闪烁黑色斑纹 (深度冲突)。按世界高度分级,
+  // 每级 +6mm 垂直分离——台基视距 (5~40m) 不可见, 但彻底消除共面冲突。
+  // 仅处理薄板 (高 < 0.8m): 楼梯/栏杆等高构件不受影响, 不再撕裂。
+  assembly.updateMatrixWorld(true);
+  const slabProbe = new THREE.Box3();
+  const slabRecords: Array<{ mesh: THREE.Mesh; minY: number }> = [];
+  assembly.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    slabProbe.setFromObject(object);
+    if (slabProbe.isEmpty()) return;
+    const centre = slabProbe.getCenter(new THREE.Vector3());
+    if (centre.y > 10) return;
+    const height = slabProbe.max.y - slabProbe.min.y;
+    if (height >= 0.8) return;
+    slabRecords.push({ mesh: object, minY: slabProbe.min.y });
+  });
+  if (slabRecords.length > 1) {
+    slabRecords.sort((a, b) => a.minY - b.minY);
+    let slabLevel = 0;
+    let slabAnchorY = slabRecords[0].minY;
+    const SLAB_LEVEL_GAP = 0.12;
+    for (const record of slabRecords) {
+      if (record.minY - slabAnchorY > SLAB_LEVEL_GAP) slabLevel += 1;
+      slabAnchorY = Math.max(slabAnchorY, record.minY);
+      record.mesh.position.y += slabLevel * 0.006;
+    }
+    console.info('[Tengwang] ' + slabRecords.length + ' 台基薄板分级微抬 ' + (slabLevel + 1) + ' 级');
+  }
   assembly.updateMatrixWorld(true);
 
   // Source-scene annex sweep: the master drags a strip of unrelated buildings
