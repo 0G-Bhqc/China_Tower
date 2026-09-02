@@ -23,3 +23,7 @@ public/assets/scene-pack/
 # Python cache (pipeline tooling)
 __pycache__/
 *.pyc
+.workbuddy/
+.workbuddy-ai/
+.zcode/
+.tmp-drt/

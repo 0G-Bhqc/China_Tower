@@ -49,6 +49,13 @@ declare global {
       lightMode: 'neutral' | 'grazing' | 'reference';
       renderCalls: number;
       renderTriangles: number;
+      // Framing, exposed so probes can reason about the horizon instead of
+      // guessing. Camera height is the single number that decides how a
+      // distant skyline reads, and it is derived here from the model span
+      // rather than authored anywhere, so it cannot be read off the source.
+      cameraPosition: number[];
+      cameraTarget: number[];
+      cameraFov: number;
     };
     __CHINA_TOWERS_PARTS__?: Array<{ id: string; label: string; category: string }>;
     __CHINA_TOWERS_UI__?: {
@@ -127,6 +134,13 @@ sunKey.shadow.normalBias = 0.03;
 scene.add(sunKey.target);
 
 const poeticEnvironment = createSceneEnvironment(scene, deviceQuality.id, renderer);
+// Review toggle: `?noranges=1` hides the distant ridge lines so the far
+// field's contribution to the 壮阔 reading can be A/B'd — same pattern as
+// `?norays=1`. Not a quality switch; the ranges cost ~2k triangles.
+if (reviewParams.get('noranges') === '1') {
+  const distantRanges = poeticEnvironment.root.getObjectByName('distant-ranges');
+  if (distantRanges) distantRanges.visible = false;
+}
 scene.add(poeticEnvironment.root);
 
 // 诗境氛围层:水岸雾气 / 飘絮落英 / 暮色流萤,随楼切换配置。
@@ -266,7 +280,14 @@ function frameModel(view = activeView) {
       : activeSpec.id === 'huanghe'
         ? 1.15
         : Math.PI * 0.25;
-    const camHeight = activeSpec.id === 'huanghe' ? 0.6 : 0.34;
+    // huanghe's camera sat at 0.6 of the framing distance — 44 m above the
+    // water, pitched 18.7° down, which put the horizon 6% from the top of the
+    // frame (scripts/verify-distant-ranges.cjs --camera). With 42° of fov that
+    // leaves roughly 48 px of sky, and a distant range needs somewhere to
+    // stand: huanghe's ridges measured the weakest footprint of the three
+    // purely because there was no sky left to show them in. Dropping to 0.46
+    // puts the horizon near the upper third without cropping the roof.
+    const camHeight = activeSpec.id === 'huanghe' ? 0.46 : 0.34;
     camera.position.set(
       centre.x + Math.sin(defaultAzimuth) * distance * 1.16,
       centre.y + distance * camHeight,
@@ -275,7 +296,7 @@ function frameModel(view = activeView) {
     // The tengwang podium is wide and low relative to the tower, so the
     // default target needs more lift to keep the roof crown in frame;
     // huanghe raises the target further so the frame tilts into the sky.
-    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : activeSpec.id === 'huanghe' ? 0.46 : 0.14;
+    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : activeSpec.id === 'huanghe' ? 0.5 : 0.14;
     controls.target.copy(centre).add(new THREE.Vector3(0, size.y * targetLift, 0));
   }
   camera.near = view === 'low-angle'
@@ -341,8 +362,17 @@ function constrainInspectionCamera(): void {
 
   const distanceToModel = cameraSafetyBounds.distanceToPoint(camera.position);
   const desiredNear = THREE.MathUtils.clamp(distanceToModel * 0.08, 0.03, Math.max(0.08, cameraSafetyBounds.getSize(new THREE.Vector3()).length() / 100));
-  if (Math.abs(camera.near - desiredNear) > 0.01) {
+  // Near-plane hysteresis. `near` sets how the renderer's logarithmic depth
+  // buffer distributes precision, so retuning it continuously while orbiting
+  // shifts every depth value each frame: surfaces sitting a hair apart — the
+  // podium slabs, the stepped 台基 courses — cross the comparison threshold
+  // back and forth and strobe. Only retune on a change big enough to be worth
+  // the depth reshuffle (>20%), and refresh the projection matrix when we do
+  // (the old code dropped that, so the retune only ever landed on the next
+  // resize — the one time it must not happen mid-frame).
+  if (Math.abs(desiredNear - camera.near) > camera.near * 0.2) {
     camera.near = desiredNear;
+    camera.updateProjectionMatrix();
   }
 }
 
@@ -430,7 +460,6 @@ let readingTimer: number | null = null;
 let sunMood: { color: string; intensity: number; ambient: string; ambientIntensity: number } | null = null;
 const sunTmpColor = new THREE.Color();
 const ambientTmpColor = new THREE.Color();
-const lastFrameCamPos = new THREE.Vector3();
 
 const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -594,6 +623,9 @@ function activateModel(model: THREE.Group, spec: PavilionSpec) {
     lightMode,
     renderCalls: 0,
     renderTriangles: 0,
+    cameraPosition: [0, 0, 0],
+    cameraTarget: [0, 0, 0],
+    cameraFov: 0,
   };
   // Expose THREE for runtime browser patching.
   (window as any).__CHINA_TOWERS_THREE__ = THREE;
@@ -670,6 +702,9 @@ async function selectPavilion(id: PavilionId) {
       lightMode,
       renderCalls: 0,
       renderTriangles: 0,
+      cameraPosition: [0, 0, 0],
+      cameraTarget: [0, 0, 0],
+      cameraFov: 0,
     };
     frameModel();
   }
@@ -882,12 +917,12 @@ function render() {
   const sunBlend = 1 - Math.exp(-frameDelta * 2.2);
   sunKey.color.lerp(sunTmpColor.set(sunTarget.color), sunBlend);
   sunKey.intensity += (sunTarget.intensity - sunKey.intensity) * sunBlend;
-  // 相机运动轻载: 拖动/环绕时暂停 GodRays 通道 (整场景深度重渲是重负载),
-  // 静止后自动恢复——直接削掉移动中的帧尖峰。
-  const cameraMoved = camera.position.distanceTo(lastFrameCamPos) > 0.02;
-  lastFrameCamPos.copy(camera.position);
-  postStack?.setGodRaysActive(!cameraMoved);
-    const hemi = lightRig.children.find((child): child is THREE.HemisphereLight => child instanceof THREE.HemisphereLight) ?? null;
+  // No motion-gated passes. God rays used to fade out while the camera moved;
+  // that coupled the frame's brightness to whether the user's hand was moving,
+  // and a hand drag is a series of pushes and pauses — so the sky pumped under
+  // the user's fingers. The mask is quarter-res and depth-only, so it just
+  // runs every frame like the water mirror does.
+  const hemi = lightRig.children.find((child): child is THREE.HemisphereLight => child instanceof THREE.HemisphereLight) ?? null;
   if (hemi) {
     hemi.color.lerp(ambientTmpColor.set(sunTarget.ambient), sunBlend);
     hemi.intensity += (sunTarget.ambientIntensity - hemi.intensity) * sunBlend;
@@ -909,6 +944,10 @@ function render() {
   if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
     window.__CHINA_TOWERS_DIAGNOSTICS__.renderCalls = renderer.info.render.calls;
     window.__CHINA_TOWERS_DIAGNOSTICS__.renderTriangles = renderer.info.render.triangles;
+    // toArray writes into the existing arrays — no per-frame allocation.
+    camera.position.toArray(window.__CHINA_TOWERS_DIAGNOSTICS__.cameraPosition);
+    controls.target.toArray(window.__CHINA_TOWERS_DIAGNOSTICS__.cameraTarget);
+    window.__CHINA_TOWERS_DIAGNOSTICS__.cameraFov = camera.fov;
   }
   // Debug only (?debug=1): sample center pixel from the renderer to verify
   // visibility. readPixels stalls the GPU pipeline and must never run per-frame.

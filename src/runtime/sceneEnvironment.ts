@@ -9,6 +9,7 @@ import { getSceneSpec, type SceneLayerId, type SceneMood } from './sceneCatalog'
 import { isAbortError, loadVerifiedGlb } from './loadVerifiedGlb';
 import { createStoneSurfaceTextures, createRockSurfaceTextures, setWorldRepeat } from './proceduralSurfaces';
 import { recolorMeshSurfaces, type SemanticPalette } from './semanticSurfaceRecolor';
+import { createDistantRanges } from './distantRanges';
 
 // The beyond-pavilion world, HDRI-driven:
 //  - far field: photographic equirectangular sky (Poly Haven, CC0) used as
@@ -1161,12 +1162,10 @@ export function createSceneEnvironment(
   let water: Water | null = null;
   if (quality !== 'mobile') {
     water = new Water(new THREE.PlaneGeometry(WATER_HALF_EXTENT * 2, WATER_HALF_EXTENT * 2), {
-      // Real-time planar reflection: the resolution is what makes roof
-      // silhouettes read in the water instead of dissolving. Standard's
-      // extra 1.5x over the old 512 buys back crispness for the every-
-      // other-frame throttle below.
-      textureWidth: quality === 'hero' ? 1024 : 768,
-      textureHeight: quality === 'hero' ? 1024 : 768,
+      // Real-time planar reflection. Cost is bought back with *resolution*,
+      // never with update rate — see the note on the mirror below.
+      textureWidth: quality === 'hero' ? 1024 : 640,
+      textureHeight: quality === 'hero' ? 1024 : 640,
       waterNormals: createWaterNormalTexture(quality),
       sunDirection: new THREE.Vector3(...TOWER_SKIES.yueyang.sunDirection).normalize(),
       sunColor: 0xd9c18d,
@@ -1188,44 +1187,36 @@ export function createSceneEnvironment(
     waterMaterial.uniforms.size.value = quality === 'hero' ? 1.6 : 1.25;
     waterMaterial.uniforms.distortionScale.value = 1.9;
     waterMaterial.transparent = true;
-    // Reflection throttle: Water re-renders the whole scene into its mirror
-    // RT inside onBeforeRender, the single largest per-frame GPU cost in the
-    // environment. On standard the update runs every other frame — the held
-    // frame is invisible in practice because the mirror is fog-softened and
-    // the camera rarely sweeps fast enough to expose the lag.
-    if (quality === 'standard') {
-      const baseOnBeforeRender = water.onBeforeRender;
-      // 运动感知节流: 镜头静止时隔帧省一半反射开销; 一旦移动立即全帧率,
-      // 否则滞后一帧的反射会在移动中读作明暗频闪。
-      let lastReflection = true;
-      const throttleCam = new THREE.Vector3();
-      const throttlePrev = new THREE.Vector3();
-      let throttlePrimed = false;
-      water.onBeforeRender = function reflectThrottle(
-        this: Water,
-        renderer: THREE.WebGLRenderer,
-        scene: THREE.Scene,
-        camera: THREE.Camera,
-        geometry: THREE.BufferGeometry,
-        material: THREE.Material,
-        group: THREE.Group,
-      ) {
-        throttleCam.setFromMatrixPosition(camera.matrixWorld);
-        const moved = !throttlePrimed || throttleCam.distanceTo(throttlePrev) > 0.02;
-        throttlePrev.copy(throttleCam);
-        throttlePrimed = true;
-        // 移动轻载: 相机运动中完全跳过反射 (整场景镜像重渲是最大逐帧负载),
-        // 运动中水面显示上一帧反射——快速移动下不可辨; 静止后恢复全帧率。
-        if (moved) {
-          lastReflection = true;
-          return;
-        }
-        lastReflection = false;
-        baseOnBeforeRender.call(this, renderer, scene, camera, geometry, material, group);
-      };
-    }
+    // No mirror throttling — deliberately, and it has been tried three times.
+    //
+    // Water re-renders the whole scene into its mirror RT inside
+    // onBeforeRender, the largest single per-frame cost here, so throttling it
+    // is tempting. But a planar reflection is a *mirror of whatever is moving*:
+    // petals falling, boats bobbing, crowns swaying, the lone bird crossing the
+    // dusk. Hold the mirror for a frame and the reflection stops tracking that
+    // content; hold it for three and the water judders at 20 Hz while the tower
+    // above it stays smooth. Every past attempt (skip while moving, update
+    // every other frame, update every third frame when parked) bought the frame
+    // time back and paid for it in surface shimmer.
+    //
+    // Cost comes out of the mirror *resolution* instead (see textureWidth
+    // above). Resolution is temporally stable — the reflection stays in sync
+    // with the scene on every frame, it is just softer, and softness is what a
+    // fogged lake surface wants anyway.
     root.add(water);
   }
+
+  // --- Distant ranges (far field) ---------------------------------------
+  // Three hazy ridge lines at ~0.6-1.7 km. They are the register between the
+  // tower and the sky that the 意境 lines assume and the scene did not have:
+  // 「衔远山，吞长江」 cannot be illustrated by a horizon with nothing on it.
+  // See src/runtime/distantRanges.ts for the per-tower reasoning.
+  const distantRanges = createDistantRanges(
+    quality,
+    WATER_Y,
+    (id) => TOWER_SKIES[id].diskDirection ?? TOWER_SKIES[id].sunDirection,
+  );
+  root.add(distantRanges.root);
 
   // --- Per-pavilion fallback landscapes ---------------------------------
   const glowMaterials: THREE.MeshStandardMaterial[] = [];
@@ -1423,6 +1414,7 @@ export function createSceneEnvironment(
   sunStreak.rotation.order = 'YXZ';
   sunStreak.rotation.x = -Math.PI / 2;
   sunStreak.scale.set(150, 640, 1);
+  // Explicit order, not left to depth sorting. See the inner band below.
   sunStreak.renderOrder = 1;
   root.add(sunStreak);
   // 内层亮带: 更短更亮, 与外层相位错开地闪烁, 合成波光粼粼。
@@ -1432,7 +1424,13 @@ export function createSceneEnvironment(
   sunStreakInner.rotation.order = 'YXZ';
   sunStreakInner.rotation.x = -Math.PI / 2;
   sunStreakInner.scale.set(62, 300, 1);
-  sunStreakInner.renderOrder = 1;
+  // Two large NormalBlending planes sitting almost on top of each other. Left
+  // to depth sorting they tie — at ~344 m out a 1 cm height difference is
+  // nothing, and three.js breaks ties by a centroid distance that wobbles as
+  // the camera orbits, so the two could swap and repaint the whole band in the
+  // other order. Normal blending is not commutative, so that swap is visible.
+  // Pin the inner band after the outer one and lift it clear of the tie.
+  sunStreakInner.renderOrder = 2;
   root.add(sunStreakInner);
   let streakBaseOpacity = 0.4;
 
@@ -1471,6 +1469,7 @@ export function createSceneEnvironment(
   // Placeholder until the HDRI arrives so the first frames are not black.
   scene.background = new THREE.Color(TOWER_SKIES.yueyang.fogColor);
 
+  const sunTintTmp = new THREE.Color();
   function applyTowerLook(id: PavilionId, background: THREE.Texture | null, environment: THREE.Texture, visibleSky?: Sky): void {
     const config = TOWER_SKIES[id];
     scene.background = background ?? null;
@@ -1507,7 +1506,7 @@ export function createSceneEnvironment(
     sunStreakInnerMaterial.color.set(config.sunDisk.color).lerp(new THREE.Color(1, 1, 1), 0.55);
     sunStreakInnerMaterial.opacity = streakBaseOpacity * 1.3;
     sunStreakInner.rotation.y = sunStreak.rotation.y;
-    sunStreakInner.position.set(sunStreak.position.x, WATER_Y + 0.06, sunStreak.position.z);
+    sunStreakInner.position.set(sunStreak.position.x, WATER_Y + 0.22, sunStreak.position.z);
     if (water) {
       const waterMaterial = water.material as THREE.ShaderMaterial;
       waterMaterial.uniforms.waterColor.value.set(config.waterColor);
@@ -1517,6 +1516,9 @@ export function createSceneEnvironment(
     }
     birdFlock.group.visible = id === 'tengwang';
     sunsetBank.visible = id === 'tengwang';
+    // Ridges take their wrap-light tint from the drawn disc, not the analytic
+    // key, so the lit flank matches the colour actually in the sky.
+    distantRanges.setActive(id, sunTintTmp.set(config.sunDisk.color));
   }
 
   // --- Source scene packages (tengwang/huanghe real environments) --------
@@ -1728,6 +1730,9 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
     const moodBlend = 1 - Math.exp(-deltaSeconds * 2.2);
     currentFog.color.lerp(moodTmpColor.set(moodTarget.fogColor), moodBlend);
     currentFog.density += (moodTarget.fogDensity - currentFog.density) * moodBlend;
+    // Ridges ride the live fog colour, so a mood cue (or a tower switch)
+    // re-tints them without a rebuild.
+    distantRanges.syncHaze(currentFog.color);
     if (water) {
       const uniforms = (water.material as THREE.ShaderMaterial).uniforms;
       uniforms.waterColor.value.lerp(moodTmpColor.set(moodTarget.waterColor), moodBlend);
@@ -1799,6 +1804,7 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       sunStreakInner.geometry.dispose();
       sunStreakInnerMaterial.dispose();
       sunStreakTexture.dispose();
+      distantRanges.dispose();
       cloudTexture.dispose();
       for (const landscape of fallbackLandscapes.values()) {
         for (const material of landscape.materials) material.dispose();
