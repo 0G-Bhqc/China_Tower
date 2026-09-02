@@ -154,7 +154,6 @@ export type PostStack = {
   setGrade: (preset: TowerGradePreset) => void;
   setMoodBias: (bias: { tint: [number, number, number]; exposure: number } | null) => void;
   setGodRays: (sunDirection: THREE.Vector3, strength: number, sunColor: string) => void;
-  setGodRaysActive: (active: boolean) => void;
   setGodRaysExcluded: (objects: Array<THREE.Object3D | null>) => void;
   setSize: (width: number, height: number) => void;
   render: () => void;
@@ -207,6 +206,18 @@ export function createPostStack(
     // specular glints (luminance >6) pass; the wider radius feathers the halo
     // so glints read as atmospheric glow, not hard sprites.
     bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.35, 6);
+    // Widen the high-pass knee. three.js hardcodes smoothWidth to 0.01, which
+    // turns `alpha = smoothstep(threshold, threshold + smoothWidth, v)` into a
+    // step function: a pixel at luminance 5.99 contributes nothing and one at
+    // 6.02 contributes everything. Water speculars are exactly the wrong kind
+    // of signal for that — the glint field is re-lit every frame by the moving
+    // normal map and by any camera motion, so thousands of pixels straddle the
+    // threshold and flip their contribution 0<->1 from frame to frame. The
+    // bloom blur then smears each flip into a halo that blinks, which reads as
+    // the water surface strobing. A 0.5 ramp makes glints swell into bloom
+    // instead of switching, while still keeping the ~2-4 luminance sky out.
+    (bloomPass as unknown as { highPassUniforms: Record<string, { value: number }> })
+      .highPassUniforms.smoothWidth.value = 0.5;
     composer.addPass(bloomPass);
   }
 
@@ -231,9 +242,6 @@ export function createPostStack(
     },
     setGodRaysExcluded: (objects: Array<THREE.Object3D | null>) => {
       godRaysPass?.setExcluded(objects);
-    },
-    setGodRaysActive: (active: boolean) => {
-      godRaysPass?.setActive(active);
     },
     setSize: (width: number, height: number) => {
       composer.setSize(width, height);

@@ -93,7 +93,21 @@ export class GodRaysPass extends Pass {
   private readonly excluded: THREE.Object3D[] = [];
   private readonly clearColor = new THREE.Color();
   private strength = 0.8;
-  private active = true;
+  // No motion weight — deliberately, and easing it was not enough.
+  //
+  // The shafts used to be faded out while the camera moved, to claw back the
+  // cost of the full-scene depth re-render behind the mask. But that makes the
+  // frame's brightness a function of whether the user's hand is currently
+  // moving, and a hand drag is not continuous motion — it is a series of
+  // pushes with pauses between them. So the weight pumped out and back in
+  // under the user's own fingers: that IS the flicker, and it is strongest
+  // during exactly the interaction the user was complaining about.
+  //
+  // Easing only slowed the strobe (180ms out / 900ms in), it did not remove
+  // the coupling; lengthening the dwell just moved the pumping to a slower
+  // rhythm. The coupling itself is the defect. The mask is quarter-resolution
+  // and depth-only, so its cost is simply paid on every frame — the same
+  // trade already accepted for the water's planar mirror.
 
   constructor(scene: THREE.Scene, camera: THREE.Camera, renderer: THREE.WebGLRenderer, width: number, height: number) {
     super();
@@ -140,14 +154,8 @@ export class GodRaysPass extends Pass {
     this.updateEnabled();
   }
 
-  /** Pause the whole pass (e.g. while the camera is moving). */
-  setActive(active: boolean): void {
-    this.active = active;
-    this.updateEnabled();
-  }
-
   private updateEnabled(): void {
-    this.enabled = this.active && this.strength > 0.01;
+    this.enabled = this.strength > 0.01;
   }
 
   setExcluded(objects: Array<THREE.Object3D | null>): void {
