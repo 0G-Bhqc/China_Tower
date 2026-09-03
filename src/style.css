@@ -36,6 +36,8 @@ h1 { margin: 0; font-size: 76px; font-weight: 500; line-height: .9; letter-spaci
 .description { margin: 14px 0 0; color: #62584e; font-size: 13px; line-height: 1.75; }
 .scene-reading { position: absolute; left: 6vw; bottom: 146px; width: min(410px, 38vw); padding: 14px 18px 15px 16px; border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(247,246,239,.72), rgba(247,246,239,.22)); backdrop-filter: blur(5px); pointer-events: auto; z-index: 4; opacity: 0; transform: translateY(10px); transition: opacity .45s ease, transform .45s ease; }
 .scene-reading.is-visible { opacity: 1; transform: translateY(0); }
+.scene-reading-close { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; background: transparent; color: #9a8c7b; cursor: pointer; font-family: Inter, sans-serif; font-size: 17px; line-height: 1; }
+.scene-reading-close:hover { color: var(--ink); }
 .scene-cue-buttons { position: absolute; left: 6vw; bottom: 112px; pointer-events: auto; z-index: 5; }
 .scene-reading-kicker { margin: 0 0 7px; color: var(--accent); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .scene-reading-anchor { margin: 0 0 5px; color: #776653; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
@@ -72,6 +74,9 @@ footer { position: absolute; right: var(--hud-gutter); bottom: 26px; color: #877
 .poetry-panel h2 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.3; }
 .icon-button { width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font-family: Inter, sans-serif; font-size: 20px; line-height: 1; }
 .icon-button:hover { color: var(--ink); border-color: var(--accent); }
+.panel-actions { display: flex; gap: 8px; align-items: flex-start; }
+.icon-text { font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 14px; font-weight: 600; }
+.icon-text[aria-pressed="true"] { border-color: var(--accent); color: #342216; background: rgba(255,250,235,.9); }
 .content-tabs { display: flex; gap: 4px; padding: 12px 22px 10px; border-bottom: 1px solid var(--line); }
 .content-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 6px 2px; margin-right: 14px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
 .content-tabs button.is-active { border-bottom-color: var(--accent); color: var(--ink); font-weight: 800; }
@@ -81,6 +86,11 @@ footer { position: absolute; right: var(--hud-gutter); bottom: 26px; color: #877
 .poem-entry h3, .content-section h3, .part-group h3 { margin: 0; font-size: 18px; font-weight: 600; }
 .poem-byline { margin: 6px 0 14px; color: var(--muted); font-size: 10px; letter-spacing: .05em; }
 .poem-entry blockquote { margin: 0 0 14px; padding-left: 13px; border-left: 2px solid var(--accent); color: #3e342b; font-size: 15px; line-height: 2; }
+/* 竖排阅读: 经典右起竖列, 只作用于诗文引文块。滚动容器 (blockquote) 保持
+   横排, 内层 .quote-body 立文字并按内容取宽 — 右起第一列落在盒的右缘,
+   左向的列溢出因此变成可向右滚动的真实宽度, scrollLeft 能送到文本开头。 */
+.poetry-panel-body.is-vertical .poem-entry blockquote { overflow-x: auto; overflow-y: hidden; border-left: 0; border-top: 2px solid var(--accent); padding: 10px 0 2px; }
+.poetry-panel-body.is-vertical .poem-entry blockquote .quote-body { display: block; writing-mode: vertical-rl; text-orientation: mixed; height: 40vh; width: max-content; line-height: 2.1; letter-spacing: .06em; }
 .poem-gloss, .content-section p, .part-group p { margin: 10px 0 0; color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 13px; line-height: 1.85; }
 details { margin-top: 14px; border-top: 1px solid rgba(61,53,44,.12); }
 summary { padding-top: 11px; cursor: pointer; color: #4b4036; font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; }

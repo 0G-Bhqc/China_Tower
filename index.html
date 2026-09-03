@@ -67,11 +67,12 @@
         <button id="toggle-debug-screenshot" aria-keyshortcuts="D">保存诊断截图</button>
       </section>
 
-      <p class="status" id="status" role="status" aria-live="polite">ORBIT · DRAG TO INSPECT</p>
+      <p class="status" id="status" role="status" aria-live="polite">高模就绪 · 拖拽检视</p>
 
       <nav class="scene-cue-buttons" id="scene-cue-buttons" aria-label="诗境机位"></nav>
 
       <aside class="scene-reading" id="scene-reading" aria-live="polite">
+        <button class="scene-reading-close" id="reading-close" aria-label="收起诗句卡">×</button>
         <p class="scene-reading-kicker">POETIC VIEWPOINT · 诗境机位</p>
         <h2 id="reading-title">—</h2>
         <p class="scene-reading-line" id="reading-line">—</p>
@@ -90,7 +91,10 @@
           <p class="panel-kicker">CLASSIC TEXTS · 古诗文</p>
           <h2 id="poetry-tower">岳阳楼 · 诗文</h2>
         </div>
-        <button class="icon-button" id="poetry-close" aria-label="关闭诗文面板">×</button>
+        <div class="panel-actions">
+          <button class="icon-button icon-text" id="poetry-vertical" aria-pressed="false" aria-label="切换竖排阅读" title="竖排阅读">竖</button>
+          <button class="icon-button" id="poetry-close" aria-label="关闭诗文面板">×</button>
+        </div>
       </header>
       <nav class="content-tabs" id="poetry-tabs" aria-label="诗文篇目"></nav>
       <div class="poetry-panel-body" id="poetry-body"></div>

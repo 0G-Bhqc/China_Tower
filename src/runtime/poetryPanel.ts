@@ -40,8 +40,15 @@ function renderWorkEntry(work: PavilionWork, index: number): HTMLElement {
   entry.appendChild(byline);
 
   const quote = document.createElement('blockquote');
-  quote.textContent = formatVerse(work.excerpt);
-  quote.style.whiteSpace = 'pre-line';
+  // 竖排模式由 CSS 在 .quote-body 上展开 (writing-mode: vertical-rl)。滚动
+  // 容器保持横排: vertical-rl 的列向左溢出且 LTR 容器不计入可滚动区, 直接
+  // 立文本块会把开头几列裁掉 — 内层 width:max-content 让溢出变成真实的
+  // 右向滚动量, snapVerticalScroll 才能把读者送到文本开头。
+  const quoteBody = document.createElement('span');
+  quoteBody.className = 'quote-body';
+  quoteBody.textContent = formatVerse(work.excerpt);
+  quoteBody.style.whiteSpace = 'pre-line';
+  quote.appendChild(quoteBody);
   entry.appendChild(quote);
 
   const gloss = document.createElement('p');
@@ -103,6 +110,7 @@ export function createPoetryPanel(): PoetryPanel {
   const bodyEl = document.getElementById('poetry-body');
   const closeButton = document.getElementById('poetry-close');
   const toggleButton = document.getElementById('poetry-toggle');
+  const verticalButton = document.getElementById('poetry-vertical');
   if (!rootEl || !towerTitleEl || !tabsNavEl || !bodyEl) {
     throw new Error('Poetry panel DOM missing: expected #poetry-panel shell in index.html');
   }
@@ -113,6 +121,33 @@ export function createPoetryPanel(): PoetryPanel {
 
   let activeTab: string = '0';
   let currentId: PavilionId = 'yueyang';
+
+  // 竖排阅读: 只翻转诗文引文块 (blockquote), 注解/赏析保持横排以保可读性。
+  // 偏好存 localStorage, 跨会话记住。
+  const VERTICAL_KEY = 'poetry-vertical';
+  // vertical-rl 的滚动原点在文本末尾一侧: 不归位的话读者先看到结尾。
+  // 右起第一列 (文本开头) 在 scrollLeft 的另一端, 打开/切换时统一送过去。
+  function snapVerticalScroll(): void {
+    if (!body.classList.contains('is-vertical')) return;
+    requestAnimationFrame(() => {
+      for (const quote of body.querySelectorAll<HTMLElement>('.poem-entry blockquote')) {
+        quote.scrollLeft = quote.scrollWidth;
+      }
+    });
+  }
+  function applyVertical(on: boolean): void {
+    body.classList.toggle('is-vertical', on);
+    verticalButton?.setAttribute('aria-pressed', String(on));
+    snapVerticalScroll();
+  }
+  applyVertical(localStorage.getItem(VERTICAL_KEY) === '1');
+  verticalButton?.addEventListener('click', () => {
+    const on = !body.classList.contains('is-vertical');
+    applyVertical(on);
+    try {
+      localStorage.setItem(VERTICAL_KEY, on ? '1' : '0');
+    } catch { /* 私密模式下存储不可用, 本次会话内仍然生效 */ }
+  });
 
   function render(pavilionId: PavilionId): void {
     const content = getPavilionContent(pavilionId);
@@ -153,6 +188,7 @@ export function createPoetryPanel(): PoetryPanel {
       for (const entry of body.children) (entry as HTMLElement).hidden = false;
     }
     body.scrollTop = 0;
+    snapVerticalScroll();
   }
 
   tabsNav.addEventListener('click', (event) => {

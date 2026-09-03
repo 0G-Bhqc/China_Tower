@@ -91,6 +91,9 @@ const toggleDebugScreenshotButton = document.querySelector<HTMLButtonElement>('#
 const lowAngleButton = document.querySelector<HTMLButtonElement>('#low-angle');
 const resetButton = document.querySelector<HTMLButtonElement>('#reset-view');
 const reviewParams = new URLSearchParams(window.location.search);
+
+// 状态行文案统一中文为主（界面其余文字全中文，状态行原先混着英文大写标签）。
+const STATUS_IDLE = '高模就绪 · 拖拽检视';
 const reviewView = reviewParams.get('view');
 const requestedLightMode = reviewParams.get('light');
 const noShadow = reviewParams.get('noshadow') === '1';
@@ -432,8 +435,8 @@ function setLowAngleView(enabled: boolean): void {
   if (lowAngleButton) lowAngleButton.textContent = enabled ? '退出仰视' : '仰视建筑';
   frameModel(activeView);
   if (status) status.textContent = enabled
-    ? 'LOW ANGLE · 拖拽观察檐下与牌匾'
-    : 'ORBIT · DRAG TO INSPECT';
+    ? '仰视模式 · 拖拽观察檐下与牌匾'
+    : STATUS_IDLE;
 }
 
 function setExploded(next: boolean) {
@@ -450,7 +453,7 @@ function setExploded(next: boolean) {
   }
   if (explodeButton) explodeButton.textContent = next ? '收拢构件' : '展开构件';
   explodeButton?.setAttribute('aria-pressed', String(next));
-  if (status) status.textContent = next ? 'EXPLODED VIEW · 可旋转查看构件层次' : 'ORBIT · DRAG TO INSPECT';
+  if (status) status.textContent = next ? '构件展开 · 旋转查看层次' : STATUS_IDLE;
 }
 
 function updateCopy(spec: PavilionSpec) {
@@ -521,15 +524,33 @@ function hideSceneReading(): void {
   }
 }
 
+const READING_AUTOHIDE_MS = 10000;
+function armReadingAutohide(ms: number = READING_AUTOHIDE_MS): void {
+  if (readingTimer !== null) window.clearTimeout(readingTimer);
+  readingTimer = window.setTimeout(hideSceneReading, ms);
+}
+
 function showSceneReading(cue: SceneCue): void {
   if (!readingPanel || !readingTitle || !readingLine || !readingObservation) return;
   readingTitle.textContent = cue.title;
   readingLine.textContent = cue.line;
   readingObservation.textContent = cue.observation;
   readingPanel.classList.add('is-visible');
-  if (readingTimer !== null) window.clearTimeout(readingTimer);
-  readingTimer = window.setTimeout(hideSceneReading, 10000);
+  armReadingAutohide();
 }
+
+// 诗句卡手动收起 + 悬停暂留: 关闭按钮立收; 鼠标停在卡上时不自动消失,
+// 移开后给 4 秒宽限再收。
+document.getElementById('reading-close')?.addEventListener('click', hideSceneReading);
+readingPanel?.addEventListener('mouseenter', () => {
+  if (readingTimer !== null) {
+    window.clearTimeout(readingTimer);
+    readingTimer = null;
+  }
+});
+readingPanel?.addEventListener('mouseleave', () => {
+  if (readingPanel.classList.contains('is-visible')) armReadingAutohide(4000);
+});
 
 function buildCueButtons(): void {
   if (!cueButtonsContainer) return;
@@ -586,7 +607,7 @@ function flyToCue(cue: SceneCue): void {
   cueFlight.toPos.addScaledVector(lateral, frameShift);
   cueFlight.toTarget.addScaledVector(lateral, frameShift * 0.55);
   showSceneReading(cue);
-  if (status) status.textContent = `POETIC VIEW · ${cue.title}`;
+  if (status) status.textContent = `诗境机位 · ${cue.title}`;
 }
 
 function cancelCueFlight(): void {
@@ -689,7 +710,7 @@ function activateModel(model: THREE.Group, spec: PavilionSpec) {
   if (activeModel.children.length > 0) {
     frameModel();
   }
-  if (status) status.textContent = HIGH_MODEL_IDS.has(spec.id) ? 'LOADING VERIFIED HIGH MODEL…' : 'ORBIT · DRAG TO INSPECT';
+  if (status) status.textContent = HIGH_MODEL_IDS.has(spec.id) ? '已验证高模 · 加载中…' : STATUS_IDLE;
 }
 
 async function selectPavilion(id: PavilionId) {
@@ -723,10 +744,10 @@ async function selectPavilion(id: PavilionId) {
     loadingFallback.userData.moduleLoading = true;
     activateModel(loadingFallback, spec);
   } else {
-    if (status) status.textContent = 'LOADING VERIFIED HIGH MODEL…';
+    if (status) status.textContent = '已验证高模 · 加载中…';
     if (window.__CHINA_TOWERS_UI__) {
       window.__CHINA_TOWERS_UI__.setLoaderVisible(true);
-      window.__CHINA_TOWERS_UI__.setLoaderProgress(0, 'LOADING VERIFIED HIGH MODEL…');
+      window.__CHINA_TOWERS_UI__.setLoaderProgress(0, '已验证高模 · 加载中…');
     }
     window.__CHINA_TOWERS_DIAGNOSTICS__ = {
       activeId: spec.id,
@@ -788,7 +809,7 @@ async function selectPavilion(id: PavilionId) {
         window.__CHINA_TOWERS_DIAGNOSTICS__.failureReason = 'module-import-failed';
         window.__CHINA_TOWERS_DIAGNOSTICS__.assetState = 'degraded';
       }
-      if (status) status.textContent = 'DEGRADED VIEW · HIGH MODEL ASSET UNAVAILABLE';
+      if (status) status.textContent = '高模资产缺失 · 已降级显示';
     }
     console.error(`Failed to load pavilion module: ${spec.id}`, error);
   }
@@ -822,7 +843,7 @@ toggleDebugScreenshotButton?.addEventListener('click', async () => {
     a.click();
     URL.revokeObjectURL(url);
     // 行内 status 提示替代 alert：不打断浏览，且随 aria-live 播报。
-    if (status) status.textContent = '已保存诊断截图 · DIAGNOSTIC SNAPSHOT SAVED';
+    if (status) status.textContent = '诊断截图已保存';
   } catch (e) {
     if (status) status.textContent = '诊断截图失败 · 见控制台';
     console.error('[diagnostic-screenshot]', e);
@@ -875,8 +896,8 @@ window.addEventListener('china-towers-model-ready', (event) => {
       window.__CHINA_TOWERS_PARTS__ = assemblyRuntime?.parts.map(({ id, label, category }) => ({ id, label, category })) ?? [];
     }
     if (status) status.textContent = activeModel?.userData.highModelLoadError
-      ? 'DEGRADED VIEW · HIGH MODEL ASSET UNAVAILABLE'
-      : 'HIGH MODEL READY · ORBIT TO INSPECT';
+      ? '高模资产缺失 · 已降级显示'
+      : STATUS_IDLE;
   }
 });
 
@@ -907,7 +928,7 @@ sceneCanvas.addEventListener('pointerup', (event) => {
   const steleRoot = steleHit ? findSteleRoot(steleHit.object) : null;
   if (steleRoot) {
     poetryPanel.showWork(steleRoot.userData.steleWorkIndex as number);
-    if (status) status.textContent = 'POETRY · 碑刻原文已打开';
+    if (status) status.textContent = '碑刻原文 · 已在诗文面板打开';
     return;
   }
   const hit = runtime.pick(raycaster.ray);
@@ -917,17 +938,17 @@ sceneCanvas.addEventListener('pointerup', (event) => {
   }
   if (status) {
     status.textContent = selected
-      ? `SELECTED · ${selected.label} · ${selected.id}`
-      : 'HIGH MODEL READY · ORBIT TO INSPECT';
+      ? `已选构件 · ${selected.label} · ${selected.id}`
+      : STATUS_IDLE;
   }
 });
 window.addEventListener('china-towers-model-progress', (event) => {
   const detail = (event as CustomEvent<{ id: PavilionId; lod: string; ratio: number }>).detail;
   if (!detail || detail.id !== activeSpec.id) return;
   const percentage = detail.ratio > 0 ? `${Math.min(100, Math.round(detail.ratio * 100))}%` : '…';
-  if (status) status.textContent = `LOADING ${detail.lod.toUpperCase()} · ${percentage}`;
+  if (status) status.textContent = `高模加载 ${detail.lod.toUpperCase()} · ${percentage}`;
   if (window.__CHINA_TOWERS_UI__) {
-    window.__CHINA_TOWERS_UI__.setLoaderProgress(detail.ratio ?? 0, `LOADING ${detail.lod.toUpperCase()} · ${percentage}`);
+    window.__CHINA_TOWERS_UI__.setLoaderProgress(detail.ratio ?? 0, `高模加载 ${detail.lod.toUpperCase()} · ${percentage}`);
   }
 });
 
