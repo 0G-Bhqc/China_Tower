@@ -86,7 +86,31 @@
   （G: 盘不存在），不擅自换备份位置。盘恢复后需补 09-03 全量包
   （上次全量包为 2026-09-02，早于本次修复）。
 
-## 六、留给下一会话的
+## 六、追加轮次：去照片远景（同日晚）
+
+用户反馈：场景现在自带一圈 3D 中远景（岸礁/树/岛/船/三道远山），HDRI 照片背景
+（岳阳晨雾远岸、黄鹤楼外的上海大桥天际线、滕王的摄影暮空）反而突兀。
+
+改动（`src/runtime/sceneEnvironment.ts`）：
+
+- 可见远景默认改为**每楼调参的物理程序化天空**（`fallbackSky` 的
+  turbidity/rayleigh + 太阳方位，原本只是 HDRI 加载失败的兜底），远山脊照旧。
+- HDRI 保留其承重职责不变：**PMREM IBL 光照**——楼的暖金瓦色、水面色调不回归。
+- `?photobg=1` 一键切回照片背景（A/B 与回滚用），`backgroundRotation/Blurriness/
+  Intensity` 仅在该模式生效。
+- Sky 盒从兜底版的 scale 1000 放大到 **4600**：小于水面半径时天墙在 ~500m 处
+  切断水面，会出现一条雾only 30% 的硬地平缝；4600 让水天相交落在 ~2300m、
+  雾 ~100% 处，无缝。相机 far=2600 仍罩得住。
+
+验证：frame-stability run-004 / godrays-stability / distant-ranges 全 PASS；
+judge 目检 4 图（三楼新天空 + photobg 对照）4/4 pass——无照片泄漏、无水天硬缝、
+无冷色/黑天回归。
+
+已知注记（judge 提出，未调）：滕王阁朱红日轮是加色混合，叠在程序化天空自己的
+太阳亮晕上后可读性下降（对比照片时代的粉底）。若要恢复「正赤如丹」的强读，
+候选手段是提高 disc 强度或压低 tengwang 的 Sky mie 贡献——属 mood 微调，待指示。
+
+## 七、留给下一会话的
 
 - 上会话遗留的 8 个 `scripts/tmp-*.cjs` 已删除；其结论固化在本文件与
   CURRENT-STATUS，能力由 4 个正式探针（`probe-flicker-dips` /

@@ -11,9 +11,11 @@ import { createStoneSurfaceTextures, createRockSurfaceTextures, setWorldRepeat }
 import { recolorMeshSurfaces, type SemanticPalette } from './semanticSurfaceRecolor';
 import { createDistantRanges } from './distantRanges';
 
-// The beyond-pavilion world, HDRI-driven:
-//  - far field: photographic equirectangular sky (Poly Haven, CC0) used as
-//    both scene background and the PBR environment (IBL) source
+// The beyond-pavilion world:
+//  - far field: per-tower physical Sky (procedural gradient, turbidity/rayleigh
+//    tuned per tower) plus the shader-tinted distant ranges. The photographic
+//    equirect (Poly Haven, CC0) is opt-in only via ?photobg=1 — it fed the
+//    PBR environment (IBL) in every mode, which is its load-bearing job
 //  - middle field: real audited scene packs for tengwang/huanghe, upgraded
 //    procedural landscape for yueyang (alpha foliage cards, displaced islands)
 //  - near field: stone terrace plaza with procedural paving, skirt wall and
@@ -78,8 +80,9 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunColor: '#f6dcae', sunIntensity: 2.2,
     cloudColor: '#eef1ec',
     sunDisk: { size: 95, color: '#ffedb0', intensity: 2.2 },
-    // Puts the HDR's open lake (not the shoreline cliff) behind the default
-    // camera corridor; the cliff stays as a hazy far shore at the sides.
+    // ?photobg=1 only: puts the HDR's open lake (not the shoreline cliff)
+    // behind the default camera corridor; the cliff stays as a hazy far shore
+    // at the sides. Default far field is the procedural Sky + distant ranges.
     backgroundIntensity: 0.78,
     exposure: 0.93,
     backgroundRotationY: 2.4,
@@ -99,8 +102,9 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunDisk: { size: 130, color: '#fff3cf', intensity: 2.8 },
     // 展示用日轮比主光略低 (34°), 默认取景抬头即可见; 主光仍保持高角度短影。
     diskDirection: [0.55, 0.26, 0.3],
-    // Frames the HDRI's own 长江大桥 across the background; rotation 0 left
-    // blurry riverbank foliage hanging over the water like curtains.
+    // ?photobg=1 only: frames the HDRI's own 长江大桥 across the background.
+    // Deliberate 08 design, retired 2026-09-03 — the photographic skyline
+    // read as a pasted print behind the 3D mid-field.
     backgroundIntensity: 1.0,
     exposure: 1.02,
     backgroundRotationY: 1.75,
@@ -1441,6 +1445,36 @@ export function createSceneEnvironment(
   let streakBaseOpacity = 0.4;
 
   // --- HDRI sky + IBL ----------------------------------------------------
+  // `?photobg=1` restores the photographic HDRI backdrop (far shores, city
+  // skylines) as the visible background. Default is the procedural Sky: the
+  // scene now owns a full ring of 3D mid/far field (shore rocks, islands,
+  // foliage, boats, distant ranges), and the photo backdrop read as a pasted
+  // print behind them (user call, 2026-09-03). The HDRI keeps its second job
+  // either way — PMREM IBL for PBR lighting.
+  const PHOTO_BACKDROP = new URLSearchParams(window.location.search).get('photobg') === '1';
+
+  // Build the per-tower physical Sky once. Scale 4600 puts the box walls just
+  // inside camera.far (2600) so the water plane (±2000) meets the sky ~2300 m
+  // out, where fog is ~100% — a smaller box (the old fallback used 1000)
+  // intersected the water at ~500 m and drew a hard, barely-fogged horizon
+  // seam. The Sky shades by view direction, so scaling changes placement, not
+  // appearance.
+  function ensureSky(id: PavilionId): Sky {
+    const existing = skyMeshes.get(id);
+    if (existing) return existing;
+    const config = TOWER_SKIES[id];
+    const sky = new Sky();
+    sky.scale.setScalar(4600);
+    const uniforms = sky.material.uniforms;
+    uniforms.turbidity.value = config.fallbackSky.turbidity;
+    uniforms.rayleigh.value = config.fallbackSky.rayleigh;
+    uniforms.mieCoefficient.value = 0.006;
+    uniforms.mieDirectionalG.value = 0.8;
+    uniforms.sunPosition.value.set(...config.sunDirection).normalize().multiplyScalar(100);
+    skyMeshes.set(id, sky);
+    return sky;
+  }
+
   async function loadTowerSky(id: PavilionId): Promise<void> {
     const config = TOWER_SKIES[id];
     try {
@@ -1449,23 +1483,18 @@ export function createSceneEnvironment(
       hdriTextures.set(id, texture);
       const environment = pmremGenerator.fromEquirectangular(texture).texture;
       hdriEnvironments.set(id, environment);
-      if (activePavilion === id) applyTowerLook(id, texture, environment);
+      if (activePavilion === id) {
+        const sky = ensureSky(id);
+        applyTowerLook(id, PHOTO_BACKDROP ? texture : null, environment, PHOTO_BACKDROP ? undefined : sky);
+      }
     } catch (error) {
       console.warn(`[sceneEnvironment] HDRI unavailable for ${id}, using physical sky fallback.`, error);
       const fallbackScene = new THREE.Scene();
-      const sky = new Sky();
-      sky.scale.setScalar(1000);
-      const uniforms = sky.material.uniforms;
-      uniforms.turbidity.value = config.fallbackSky.turbidity;
-      uniforms.rayleigh.value = config.fallbackSky.rayleigh;
-      uniforms.mieCoefficient.value = 0.006;
-      uniforms.mieDirectionalG.value = 0.8;
-      uniforms.sunPosition.value.set(...config.sunDirection).normalize().multiplyScalar(100);
+      const sky = ensureSky(id);
       fallbackScene.add(sky);
       const fallbackEnvironment = pmremGenerator.fromScene(fallbackScene, 0.04).texture;
       fallbackScene.remove(sky);
       hdriEnvironments.set(id, fallbackEnvironment);
-      skyMeshes.set(id, sky);
       if (activePavilion === id) applyTowerLook(id, null, fallbackEnvironment, sky);
     }
   }
@@ -1476,19 +1505,22 @@ export function createSceneEnvironment(
   scene.background = new THREE.Color(TOWER_SKIES.yueyang.fogColor);
 
   const sunTintTmp = new THREE.Color();
-  function applyTowerLook(id: PavilionId, background: THREE.Texture | null, environment: THREE.Texture, visibleSky?: Sky): void {
+  function applyTowerLook(id: PavilionId, background: THREE.Texture | null, environment: THREE.Texture | null, visibleSky?: Sky): void {
     const config = TOWER_SKIES[id];
     scene.background = background ?? null;
     if (background) {
       scene.backgroundRotation = new THREE.Euler(0, config.backgroundRotationY, 0);
       // Full-strength backdrop: the photographic HDRI IS the distant scenery
       // (far shores, city skylines); dimming it reads as a washed-out print.
+      // Opt-in only now (?photobg=1) — default far field is the procedural Sky.
       scene.backgroundIntensity = config.backgroundIntensity;
       // Per-tower exposure: dawn lakes wash out at the dusk-tuned default.
       renderer.toneMappingExposure = config.exposure;
       scene.backgroundBlurriness = config.backgroundBlurriness;
     }
-    scene.environment = environment;
+    // IBL: keep the previous tower's environment until this tower's PMREM
+    // finishes loading (setPavilion may run before loadTowerSky resolves).
+    if (environment) scene.environment = environment;
     // Outdoor HDRI skies carry far more irradiance than the old indoor
     // RoomEnvironment: keep IBL below the analytic key so shadows keep their
     // direction, but high enough that shadow sides hold colour.
@@ -1684,8 +1716,16 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
     }
     const hdriTexture = hdriTextures.get(id);
     const environment = hdriEnvironments.get(id);
-    if (environment) applyTowerLook(id, hdriTexture ?? null, environment, hdriTexture ? undefined : skyMeshes.get(id));
-    else scene.background = new THREE.Color(TOWER_SKIES[id].fogColor);
+    const sky = ensureSky(id);
+    if (environment) {
+      const photoVisible = PHOTO_BACKDROP && Boolean(hdriTexture);
+      applyTowerLook(id, photoVisible ? hdriTexture ?? null : null, environment, photoVisible ? undefined : sky);
+    } else {
+      // First visit before this tower's PMREM exists: show the procedural sky
+      // now, keep the previous tower's IBL until the async load lands.
+      scene.background = new THREE.Color(TOWER_SKIES[id].fogColor);
+      applyTowerLook(id, null, null, sky);
+    }
     void loadTowerSky(id);
     void loadPackage(id);
   };
