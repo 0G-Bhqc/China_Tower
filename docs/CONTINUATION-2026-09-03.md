@@ -140,10 +140,37 @@ judge 目检 4 图（三楼新天空 + photobg 对照）4/4 pass——无照片�
    保持横排、内层 `.quote-body` 立文字并 `width: max-content`，溢出变成真实
    右向滚动量，切换/换页时 `scrollLeft` 归位到文本开头。
 
-## 九、留给下一会话的
+## 九、留给下一会话的（09-03 夜已收口部分）
 
 - 上会话遗留的 8 个 `scripts/tmp-*.cjs` 已删除；其结论固化在本文件与
   CURRENT-STATUS，能力由 4 个正式探针（`probe-flicker-dips` /
   `probe-flash-bisect` / `probe-flicker-ground-truth` / `probe-bloom-nan-isolate`）继承。
 - `?nobloom` / `?nobg` 隔离开关与上会话的 `?nowater` / `?nopost` 一样属审查
   基础设施，保留在代码里（都有注释说明）。
+
+## 十、夜收口轮次（备份优先，依次执行）
+
+用户指令：「向 Google Drive 备份后依次执行」。按 P0→P5 落子，全部有证据：
+
+1. **P0 — G 盘全量包**：`G:\我的云端硬盘\China_Tower\China_Tower-backup-20260903.zip`
+   （1.85 GB，Optimal；与 09-02 包逐文件比对：零丢失，+7 新文件——4 个正式探针、
+   `public/favicon.svg`、本文件、references 调研包；`src/main.ts` 为含 reset 修复的工作区版本，
+   已解包抽查 `resetInspection` 在包内）。
+2. **P1 — R 键统一 reset**（提交 `8bb2a6f`）：`resetInspection()` 只接了 `#reset-view`
+   按钮，`keydown r` 仍是旧内联四行——相机回位而诗境 mood/缓转/诗句卡残留。
+   改为 R 键直接调 `resetInspection()`。无头回归 PASS（诗境机位→R/按钮均清卡、
+   状态回 `高模就绪 · 拖拽检视`、零 pageerror）；`tsc --noEmit` 通过。
+3. **P2 — polish 补正式证据**（此前两轮 polish 只有 commit 口述）：
+   frame-stability `run-007` PASS（worst diffCv 0.138，tengwang orbit sky）、
+   godrays `run-005` PASS（worst push→pause ≤2 vs half-gate 338-499）、
+   distant-ranges `run-009` PASS（sky strong 4.18/5.79/3.66%）、
+   flicker-dips 三楼 0/0/0（yueyang 1507+1492 帧 / huanghe 1371 / tengwang 1490，
+   落盘 `culprit-report-{yueyang,huanghe,tengwang}.json`）。
+4. **P3 — 重打 dist**：`npm run build:final-html` 全链 PASS
+   （52 hashed files / 35 GLBs / entry verified）；chunk 警告仍在
+   （948.91 kB / gzip 262.16 kB），已知外观项未动。
+5. **P5 — 文档收口**：CURRENT-STATUS 基线表换到 run-009/005/007、备份段更新、
+   新增「night close-out」节；本文件追加本节。提交后工作区干净。
+
+仍 open（未动，需指示）：黄鹤楼远岸雾限（mood 改动，独立立项）、
+滕王阁朱红日轮叠 Sky 太阳晕可读性（提高 disc 或压 mie）、bundle 分包、无 remote 单点。

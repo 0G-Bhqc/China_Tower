@@ -1,8 +1,9 @@
 # China Tower project continuation status
 
-Updated: 2026-09-03 (Asia/Shanghai)
+Updated: 2026-09-03 夜收口 (Asia/Shanghai)
 Workspace: `E:/Station/China_Tower`
 Branch: `master` (local only, no remote)
+HEAD: `8bb2a6f` (R 键与重置按钮统一走 resetInspection)，工作区干净，`dist/` 已重打并校验通过
 
 ## What this project is now
 
@@ -30,12 +31,26 @@ Three probe scripts live in `scripts/`, all writing `results.json` under `eviden
 
 | Probe | Result | Run |
 | --- | --- | --- |
-| distant-ranges (3 towers) | PASS — sky strong-signal 3.3-5.5% of frame | `run-007` |
-| godrays-stability (3 towers) | PASS — worst push→pause delta 6/2/3 vs half-gate 337-650 | `run-003` |
-| frame-stability (3 towers × parked/orbit) | PASS — all checks diffCv ≤ 0.131 vs 0.6 limit | `run-003` |
-| flicker-dips (3 towers, stop-start drags) | PASS — composited-frame dips 0 / 0 / 0 | 2026-09-03 |
+| distant-ranges (3 towers) | PASS — sky strong-signal 4.18 / 5.79 / 3.66% of frame | `run-009` (09-03 夜，polish 后) |
+| godrays-stability (3 towers) | PASS — worst push→pause delta ≤ 2 vs half-gate 338-499 | `run-005` (09-03 夜，polish 后) |
+| frame-stability (3 towers × parked/orbit) | PASS — all checks diffCv ≤ 0.138 vs 0.6 limit | `run-007` (09-03 夜，polish 后) |
+| flicker-dips (3 towers, stop-start drags) | PASS — composited-frame dips 0 / 0 / 0（`culprit-report-*.json`，polish + reset 修复后复测） | 2026-09-03 夜 |
 
 A failed check needs a re-run after the fix, not an argument.
+
+## The 09-03 night close-out (after the flicker round)
+
+1. **R 键与重置按钮统一** (`8bb2a6f`)。`resetInspection()`（`cancelCueFlight + hideSceneReading + 清选中/展构件/仰视`）
+   只接了重置按钮，R 键仍是旧内联逻辑：相机回默认位、氛围残留诗境。现 R 键直接调 `resetInspection()`。
+   无头回归：诗境机位 → R / 按钮均清诗句卡、状态回中文就绪、零 pageerror；`tsc --noEmit` 通过。
+2. **polish 两轮补正式证据。** `ab94c3f` 前的探针跑在旧代码上；夜里重跑
+   frame-stability `run-007` / godrays `run-005` / distant-ranges `run-009` /
+   flicker-dips 三楼 0-0-0，全 PASS（见上表）。
+3. **`dist/` 已重打。** `npm run build:final-html`（tsc + vite + 打包 + `verify-final-html`）PASS；
+   部署契约：52 hashed files / 35 GLBs / entry assets verified。
+4. **G 盘全量包已补。** `G:\我的云端硬盘\China_Tower\China_Tower-backup-20260903.zip`
+  （1.85 GB，Optimal 压缩；内容是 09-02 包的超集，+7 个新文件：4 个正式探针、
+   `favicon.svg`、CONTINUATION-2026-09-03、references 调研包；`src/main.ts` 为含 reset 修复的工作区版本）。
 
 ## The 09-03 flicker round (two root causes, both measured)
 
@@ -78,10 +93,9 @@ screencast artifact.
 1. **黄鹤楼 far bank is haze-limited.** 「晴川历历汉阳树」 wants legibility, but the tower carries the
    heaviest mood fog of the three (`fogDensity 0.0014` in `TOWER_SKIES`). Lowering fog globally is a
    mood change, not a range fix — do it as its own measured round if attempted.
-2. **No git remote.** Backups go to `G:\我的云端硬盘\China_Tower\<dated>.zip` (4.0 GB full pack,
-   2026-09-02). Local-only git is a single point of failure. On 2026-09-03 the G: drive was not
-   mounted, so no fresh pack exists for the flicker-fix commit — make one when the drive returns.
-3. **Chunk size warning** on the main JS bundle (947 kB, gzip 261 kB). Cosmetic; split if load
+2. **No git remote.** Backups go to `G:\我的云端硬盘\China_Tower\<dated>.zip`. Local-only git is a single point of failure.
+   09-03 夜已补 `China_Tower-backup-20260903.zip`（含频闪修复 + 去照片化 + 两轮 polish + R 键统一），与 HEAD 仅差本文档收口提交。
+3. **Chunk size warning** on the main JS bundle (948.91 kB, gzip 262.16 kB, 09-03 夜重打实测). Cosmetic; split if load
    times ever matter.
 4. `docs/CONTINUATION-2026-09-02.md` documents the 09-02 session end-to-end (diagnosis →
    crest-anchor bug fix → evidence); `docs/CONTINUATION-2026-09-03.md` does the same for the
