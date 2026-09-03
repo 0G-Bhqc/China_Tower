@@ -808,7 +808,7 @@ toggleDebugScreenshotButton?.addEventListener('click', async () => {
     const renderer = window.__CHINA_TOWERS_RENDERER__;
     const canvas = renderer?.domElement;
     if (!canvas) {
-      alert('No renderer canvas available');
+      if (status) status.textContent = '诊断截图失败 · 渲染器未就绪';
       return;
     }
     const dataUrl = canvas.toDataURL('image/png');
@@ -818,15 +818,19 @@ toggleDebugScreenshotButton?.addEventListener('click', async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `tengwang-debug-${Date.now()}.png`;
+    a.download = `${activeSpec.id}-diagnostic-${Date.now()}.png`;
     a.click();
     URL.revokeObjectURL(url);
-    alert('Debug screenshot saved');
+    // 行内 status 提示替代 alert：不打断浏览，且随 aria-live 播报。
+    if (status) status.textContent = '已保存诊断截图 · DIAGNOSTIC SNAPSHOT SAVED';
   } catch (e) {
-    alert('Screenshot failed: ' + e);
+    if (status) status.textContent = '诊断截图失败 · 见控制台';
+    console.error('[diagnostic-screenshot]', e);
   }
 });
 window.addEventListener('keydown', (event) => {
+  // 浏览器/系统组合键不归页面管：Ctrl+R、Cmd+P 之类不能误触发视角与面板。
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.key >= '1' && event.key <= '3') {
     const spec = PAVILION_SPECS[Number(event.key) - 1];
     if (spec) selectPavilion(spec.id);
@@ -834,6 +838,7 @@ window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 'e') setExploded(!exploded);
   if (event.key.toLowerCase() === 'v') setLowAngleView(activeView !== 'low-angle');
   if (event.key.toLowerCase() === 'p') poetryPanel.toggle();
+  if (event.key.toLowerCase() === 'd') toggleDebugScreenshotButton?.click();
   if (event.key === 'Escape') poetryPanel.setOpen(false);
   if (event.key.toLowerCase() === 'r') {
     getPavilionAssemblyRuntime(activeModel)?.clearSelection();
