@@ -1,6 +1,6 @@
 # China Tower project continuation status
 
-Updated: 2026-09-02 (Asia/Shanghai)
+Updated: 2026-09-03 (Asia/Shanghai)
 Workspace: `E:/Station/China_Tower`
 Branch: `master` (local only, no remote)
 
@@ -30,11 +30,48 @@ Three probe scripts live in `scripts/`, all writing `results.json` under `eviden
 
 | Probe | Result | Run |
 | --- | --- | --- |
-| distant-ranges (3 towers) | PASS — sky strong-signal 3.3-5.5% of frame | `run-006` |
-| godrays-stability (3 towers) | PASS — worst push→pause delta 6/2/3 vs half-gate 337-650 | `run-001` |
-| frame-stability (3 towers × parked/orbit) | PASS — 18/18 checks, diffCv ≤ 0.164 vs 0.6 limit | `run-001` |
+| distant-ranges (3 towers) | PASS — sky strong-signal 3.3-5.5% of frame | `run-007` |
+| godrays-stability (3 towers) | PASS — worst push→pause delta 6/2/3 vs half-gate 337-650 | `run-003` |
+| frame-stability (3 towers × parked/orbit) | PASS — all checks diffCv ≤ 0.131 vs 0.6 limit | `run-003` |
+| flicker-dips (3 towers, stop-start drags) | PASS — composited-frame dips 0 / 0 / 0 | 2026-09-03 |
 
 A failed check needs a re-run after the fix, not an argument.
+
+## The 09-03 flicker round (two root causes, both measured)
+
+The user-visible 频闪 was two independent defects. Both were found by
+screencast-frame forensics (`scripts/probe-flicker-dips.cjs`: CDP screencast +
+in-page mesh-containment sampler), then bisected with URL toggles
+(`probe-flash-bisect.cjs`: `nopost/nowater/nobloom/norays/noranges/nobg`),
+then fixed and re-measured to zero.
+
+1. **Shore-rock fly-through (all towers).** The 22 `scene-shore-rock-*` meshes
+   ring the plaza at radius 34-37 — exactly the ground-level orbit corridor
+   (`minPolarAngle` drags clamp the camera to y≈0.25). Inside a rock's bounding
+   sphere the lens sees nothing but magnified rock texture for several frames:
+   the "flash". Fix: collect the rocks' world bounding spheres once and hard
+   push the camera to `radius + 0.6` in `constrainInspectionCamera` (every
+   tower). A partial soft-nudge (lerp 0.3) was measured to lose against a
+   continuous drag — the correction must be per-frame absolute.
+2. **Horizon-glow NaN → bloom wash (tengwang).** `poetic-horizon-glow`'s
+   fragment shader computed `pow(1.0 - vUv.y, 1.6)` unguarded. At ground level
+   the 1600 m billboard clips against the near plane, perspective-correct
+   interpolation pushes `vUv.y` out of [0,1] on the clipped scanline, and
+   `pow(negative, 1.6)` writes a NaN **row** into the scene buffer. Bloom's
+   high-pass picks the row up and the 5-mip blur + composite smear it across
+   the whole frame; ACES tone-maps Inf/Inf → NaN → the composited frame is
+   100 % black for 1-3 frames (~130 dips per drag session). Instrumented
+   per-pass pixel dumps (`pass tracer` round) showed RenderPass output clean,
+   bloom output NaN at 3 of 5 sample spots. Fix: `clamp(1.0 - vUv.y, 0.0, 1.0)`
+   — pixel-identical in-domain, judge-verified the 落霞 glow is unchanged.
+   `probe-bloom-nan-isolate.cjs` names the poison object by hiding candidates
+   at a parked poison pose. Tengwang was the only affected tower in practice
+   (its ground-level corridor faces the glow azimuth).
+
+Cross-check: `probe-flicker-ground-truth.cjs` samples the canvas from inside
+the page AND via CDP in the same session — during the bug both samplers dipped
+in lockstep (144/144), proving the black was real rendered content, not a
+screencast artifact.
 
 ## Known open items
 

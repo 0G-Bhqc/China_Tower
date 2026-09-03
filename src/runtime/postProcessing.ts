@@ -201,11 +201,15 @@ export function createPostStack(
 
   let bloomPass: UnrealBloomPass | null = null;
   if (quality !== 'mobile') {
+    // `?nobloom=1` isolates the bloom stage for flicker A/B probes — same
+    // review-toggle pattern as main.ts's nowater/nopost.
+    const bloomDisabled = new URLSearchParams(window.location.search).get('nobloom') === '1';
     // Outdoor HDR skies sit well above luminance 1 almost everywhere, so a low
     // threshold blooms the entire sky into a milky veil. Only the sun disk and
     // specular glints (luminance >6) pass; the wider radius feathers the halo
     // so glints read as atmospheric glow, not hard sprites.
     bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.35, 6);
+    bloomPass.enabled = !bloomDisabled;
     // Widen the high-pass knee. three.js hardcodes smoothWidth to 0.01, which
     // turns `alpha = smoothstep(threshold, threshold + smoothWidth, v)` into a
     // step function: a pixel at luminance 5.99 contributes nothing and one at

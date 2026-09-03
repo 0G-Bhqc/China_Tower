@@ -1337,7 +1337,13 @@ export function createSceneEnvironment(
       void main() {
         // 横向余弦聚在落日方位, 纵向贴地平线向上衰减。
         float lateral = pow(max(0.0, 1.0 - abs(vUv.x - 0.5) * 2.0), 2.2);
-        float vertical = pow(1.0 - vUv.y, 1.6);
+        // The clamp is load-bearing: when the camera sits at ground level the
+        // 1600m billboard clips against the near plane and perspective-correct
+        // interpolation pushes vUv.y outside [0,1] on the clipped scanline.
+        // pow(negative, 1.6) = NaN there, one row of the scene buffer turns
+        // NaN, and bloom smears that NaN across the whole frame — a full
+        // black flash (measured: the flicker dips die with this clamp).
+        float vertical = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.6);
         gl_FragColor = vec4(uColor * (lateral * vertical * uIntensity), 1.0);
       }
     `,

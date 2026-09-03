@@ -141,7 +141,35 @@ if (reviewParams.get('noranges') === '1') {
   const distantRanges = poeticEnvironment.root.getObjectByName('distant-ranges');
   if (distantRanges) distantRanges.visible = false;
 }
+// `?nobg=1` drops the HDRI background (IBL stays) — flicker probes for the
+// bloom/HalfFloat overflow path.
+if (reviewParams.get('nobg') === '1') {
+  scene.background = null;
+}
+// `?nowater=1` hides the water plane entirely — its mirror RT is the largest
+// per-frame re-render, so it needs its own isolation switch (flicker probes).
+if (reviewParams.get('nowater') === '1') {
+  const water = poeticEnvironment.root.getObjectByName('poetic-river-or-lake');
+  if (water) water.visible = false;
+}
 scene.add(poeticEnvironment.root);
+
+// The shore-rock ring sits exactly where a ground-level orbit travels: with
+// the camera clamped to plaza height it plows into the rocks and a rock face
+// fills the whole lens for several frames — the measured flicker dips. The
+// rocks are static, so collect their world bounding spheres once and use them
+// as soft push-out obstacles in constrainInspectionCamera.
+const cameraObstacles: Array<{ center: THREE.Vector3; radius: number }> = [];
+poeticEnvironment.root.updateMatrixWorld(true);
+poeticEnvironment.root.traverse((obj) => {
+  if (!(obj instanceof THREE.Mesh) || !obj.name.startsWith('scene-shore-rock')) return;
+  const geometry = obj.geometry;
+  if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+  cameraObstacles.push({
+    center: geometry.boundingSphere.center.clone().applyMatrix4(obj.matrixWorld),
+    radius: geometry.boundingSphere.radius * obj.matrixWorld.getMaxScaleOnAxis(),
+  });
+});
 
 // 诗境氛围层:水岸雾气 / 飘絮落英 / 暮色流萤,随楼切换配置。
 const atmosphere = createAmbientAtmosphere(deviceQuality.id);
@@ -157,7 +185,10 @@ controls.enablePan = true;
 
 // HDR chain + bloom finish: hero/standard get bloom + god rays, mobile keeps
 // the single-pass film grade so the per-tower mood survives on the low tier.
-const postStack = createPostStack(renderer, scene, camera, deviceQuality.id);
+// `?nopost=1` bypasses the whole post chain (bloom, god rays, grade) for
+// A/B isolation of flicker sources; the raw renderer.render path stays live.
+const noPost = reviewParams.get('nopost') === '1';
+const postStack = noPost ? null : createPostStack(renderer, scene, camera, deviceQuality.id);
 // The god-ray mask pass must not see the water (its onBeforeRender would
 // re-render the mirror scene) or the atmosphere billboards (they would punch
 // solid holes in the mask).
@@ -336,6 +367,25 @@ function constrainInspectionCamera(): void {
   // fight the intended close framing.
   const minimumY = Math.max(poeticEnvironment.groundY, cameraGroundY) + cameraClearance;
   if (camera.position.y < minimumY) camera.position.y = minimumY;
+  // Shore-rock soft push applies to every tower (the rocks belong to the
+  // shared environment, and the ground-level orbit corridor runs through the
+  // ring on all three). The correction is per-frame absolute — a partial
+  // nudge loses to a continuous drag, which re-penetrates faster than a 30%
+  // lerp can return, and the lens ends up inside the rock again. The sphere
+  // boundary is smooth, so the resolved path reads as the camera gliding
+  // around the obstacle instead of a snap.
+  for (const obstacle of cameraObstacles) {
+    const offset = camera.position.clone().sub(obstacle.center);
+    const distance = offset.length();
+    const clearance = obstacle.radius + Math.max(cameraClearance, 0.6);
+    if (distance >= clearance) continue;
+    if (distance < 1e-4) {
+      camera.position.x = obstacle.center.x + clearance;
+      continue;
+    }
+    camera.position.copy(obstacle.center).addScaledVector(offset.divideScalar(distance), clearance);
+    if (camera.position.y < minimumY) camera.position.y = minimumY;
+  }
   if (activeSpec.id === 'tengwang') return;
 
   const collisionBounds = cameraSafetyBounds.clone().expandByScalar(cameraClearance);
@@ -948,6 +998,31 @@ function render() {
     camera.position.toArray(window.__CHINA_TOWERS_DIAGNOSTICS__.cameraPosition);
     controls.target.toArray(window.__CHINA_TOWERS_DIAGNOSTICS__.cameraTarget);
     window.__CHINA_TOWERS_DIAGNOSTICS__.cameraFov = camera.fov;
+  }
+  // Debug only (?debug=1): per-frame scene state ring for flicker forensics.
+  // Correlates composited-pixel dips with the renderer's actual state on that
+  // exact frame (background, fog, exposure, lights, near/far, post stack).
+  if (debugLoop) {
+    const w = window as unknown as { __SCENE_STATE_RING__?: Record<string, unknown>[] };
+    const ring = (w.__SCENE_STATE_RING__ ??= []);
+    const bg = scene.background;
+    ring.push({
+      t: performance.now(),
+      calls: renderer.info.render.calls,
+      tris: renderer.info.render.triangles,
+      bg: bg ? ('isTexture' in bg ? 'hdri' : `color#${bg.getHexString()}`) : 'null',
+      bgIntensity: scene.backgroundIntensity,
+      envIntensity: scene.environmentIntensity,
+      exposure: renderer.toneMappingExposure,
+      fog: scene.fog ? `${scene.fog.color.getHexString()}/${('density' in scene.fog ? scene.fog.density : -1).toFixed(4)}` : 'null',
+      near: camera.near,
+      far: camera.far,
+      camY: camera.position.y,
+      post: postStack ? 'on' : 'off',
+      water: poeticEnvironment.root.getObjectByName('poetic-river-or-lake')?.visible ? 'on' : 'off',
+      ranges: poeticEnvironment.root.getObjectByName('distant-ranges')?.visible ? 'on' : 'off',
+    });
+    if (ring.length > 4000) ring.shift();
   }
   // Debug only (?debug=1): sample center pixel from the renderer to verify
   // visibility. readPixels stalls the GPU pipeline and must never run per-frame.
