@@ -79,11 +79,13 @@ screencast artifact.
    heaviest mood fog of the three (`fogDensity 0.0014` in `TOWER_SKIES`). Lowering fog globally is a
    mood change, not a range fix — do it as its own measured round if attempted.
 2. **No git remote.** Backups go to `G:\我的云端硬盘\China_Tower\<dated>.zip` (4.0 GB full pack,
-   2026-09-02). Local-only git is a single point of failure.
-3. **Chunk size warning** on the main JS bundle (945 kB, gzip 260 kB). Cosmetic; split if load
+   2026-09-02). Local-only git is a single point of failure. On 2026-09-03 the G: drive was not
+   mounted, so no fresh pack exists for the flicker-fix commit — make one when the drive returns.
+3. **Chunk size warning** on the main JS bundle (947 kB, gzip 261 kB). Cosmetic; split if load
    times ever matter.
 4. `docs/CONTINUATION-2026-09-02.md` documents the 09-02 session end-to-end (diagnosis →
-   crest-anchor bug fix → evidence).
+   crest-anchor bug fix → evidence); `docs/CONTINUATION-2026-09-03.md` does the same for the
+   flicker round (two root causes → fixes → zero-dip evidence).
 
 ## The crest-anchor bug (kept as a case study)
 
