@@ -818,12 +818,17 @@ async function selectPavilion(id: PavilionId) {
 cards.forEach((card) => card.addEventListener('click', () => selectPavilion(card.dataset.pavilion as PavilionId)));
 explodeButton?.addEventListener('click', () => setExploded(!exploded));
 lowAngleButton?.addEventListener('click', () => setLowAngleView(activeView !== 'low-angle'));
-resetButton?.addEventListener('click', () => {
+function resetInspection(): void {
+  // 重置 = 全部回到楼的默认态: 诗境机位的 mood/自动缓转/诗句卡一并取消,
+  // 否则相机回了默认位, 氛围却停在诗境里 (实测 R 键残留 mood 的缺陷)。
+  cancelCueFlight();
+  hideSceneReading();
   getPavilionAssemblyRuntime(activeModel)?.clearSelection();
   if (window.__CHINA_TOWERS_DIAGNOSTICS__) window.__CHINA_TOWERS_DIAGNOSTICS__.selectedPart = null;
   setExploded(false);
   setLowAngleView(false);
-});
+}
+resetButton?.addEventListener('click', resetInspection);
 toggleDebugScreenshotButton?.addEventListener('click', async () => {
   try {
     const renderer = window.__CHINA_TOWERS_RENDERER__;
@@ -862,10 +867,7 @@ window.addEventListener('keydown', (event) => {
   if (event.key.toLowerCase() === 'd') toggleDebugScreenshotButton?.click();
   if (event.key === 'Escape') poetryPanel.setOpen(false);
   if (event.key.toLowerCase() === 'r') {
-    getPavilionAssemblyRuntime(activeModel)?.clearSelection();
-    if (window.__CHINA_TOWERS_DIAGNOSTICS__) window.__CHINA_TOWERS_DIAGNOSTICS__.selectedPart = null;
-    setExploded(false);
-    setLowAngleView(false);
+    resetInspection();
   }
 });
 window.addEventListener('china-towers-model-ready', (event) => {
