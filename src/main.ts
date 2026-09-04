@@ -590,12 +590,12 @@ function flyToCue(cue: SceneCue): void {
     (reviewParams.get('norays') === '1' ? 0 : getTowerGodRayStrength(activeSpec.id)) * moodSunRatio,
     cue.mood.sunColor,
   );
-  // Grade bias per cue mood: dawn lifts cool and bright, autumn dusk sinks
-  // warm and dark — the difference between 晨雾 and 落霞.
+  // Grade bias per cue mood: dawn lifts cool and bright, autumn dusk (and the
+  // deeper 落霞 dusk) sinks warm and dark — the difference between 晨雾 and 落霞.
   postStack?.setMoodBias(
     cue.mood.name === 'dawn'
       ? { tint: [0.98, 1.0, 1.04], exposure: 0.015 }
-      : cue.mood.name === 'autumnDusk'
+      : cue.mood.name === 'autumnDusk' || cue.mood.name === 'deepDusk'
         ? { tint: [1.08, 0.96, 0.88], exposure: -0.05 }
         : { tint: [1.0, 1.0, 1.0], exposure: 0.015 },
   );
