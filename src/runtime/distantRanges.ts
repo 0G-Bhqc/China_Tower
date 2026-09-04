@@ -103,12 +103,12 @@ const TOWER_RANGES: Record<PavilionId, TowerRangeSpec> = {
   // nearest ridges. A hazy 晴川 would contradict the line it is illustrating.
   huanghe: {
     sunCorridor: 0.35,
-    hazeFalloff: 178,
+    hazeFalloff: 190,
     sunWrap: 0.12,
     layers: [
-      { radius: 760, height: 66, color: '#5b6a66', haze: 0.3, seed: 5 },
-      { radius: 1180, height: 107, color: '#78868a', haze: 0.52, seed: 13 },
-      { radius: 1660, height: 176, color: '#96a2a6', haze: 0.74, seed: 21 },
+      { radius: 760, height: 66, color: '#5b6a66', haze: 0.24, seed: 5 },
+      { radius: 1180, height: 107, color: '#78868a', haze: 0.45, seed: 13 },
+      { radius: 1660, height: 176, color: '#96a2a6', haze: 0.68, seed: 21 },
     ],
   },
   // 赣江: 「层峦耸翠，上出重霄」 and 「烟光凝而暮山紫」. The tallest and the most

@@ -93,7 +93,9 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
   },
   huanghe: {
     file: '/assets/hdri/shanghai_riverside.hdr',
-    fogColor: '#aab4bc', fogDensity: 0.0014,
+    // 晴川专项：雾密度 0.0014→0.0011（与岳阳看齐）。「历历」要的是能见度，
+    // 三楼最重的 mood 雾与远景诉求直接矛盾——属 mood 改动，独立量测（见 distant-ranges）。
+    fogColor: '#aab4bc', fogDensity: 0.0011,
     waterColor: '#3c5f72', waterOpacity: 0.88,
     bloomStrength: 0.14,
     sunDirection: [0.55, 0.85, 0.3],
@@ -122,7 +124,9 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     sunColor: '#ffbe82', sunIntensity: 2.3,
     cloudColor: '#f2c4a2',
     // 正赤如丹: a large vermilion disc flattened onto the water-sky junction.
-    sunDisk: { size: 380, color: '#f04a14', intensity: 6.8, soft: true },
+    // 恢弘落日: 460 世界单位 + 更扁的椭圆（1.18 x 0.8），让日轮横向铺满江面，
+    // 纵向压向水天线——落日就该是横的、沉的。
+    sunDisk: { size: 460, color: '#f04a14', intensity: 7.5, soft: true },
     diskDirection: [-0.85, 0.024, -0.35],
     backgroundIntensity: 1.08,
     exposure: 1.05,
@@ -274,7 +278,7 @@ function createWaterNormalTexture(quality: 'hero' | 'standard' | 'mobile'): THRE
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(36, 36);
+  texture.repeat.set(48, 48);
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
@@ -1300,20 +1304,21 @@ export function createSceneEnvironment(
   const sunsetMaterial = new THREE.MeshBasicMaterial({
     map: cloudTexture,
     transparent: true,
-    opacity: 0.66,
+    opacity: 0.72,
     depthWrite: false,
     fog: true,
     side: THREE.DoubleSide,
     color: 0xff9d6e,
   });
   const sunsetAzimuth = Math.atan2(TOWER_SKIES.tengwang.sunDirection[0], TOWER_SKIES.tengwang.sunDirection[2]);
-  for (let index = 0; index < 4; index += 1) {
+  // 六幅霞云、铺展 ±1.5 rad：落霞要连成带，不能是几块孤云。
+  for (let index = 0; index < 6; index += 1) {
     const card = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunsetMaterial);
     card.name = `poetic-sunset-cloud-${index}`;
-    const angle = sunsetAzimuth + (hashNoise(index, 141) - 0.5) * 1.1;
-    const radius = 270 + hashNoise(index, 143) * 70;
+    const angle = sunsetAzimuth + (hashNoise(index, 141) - 0.5) * 1.5;
+    const radius = 260 + hashNoise(index, 143) * 90;
     card.position.set(Math.sin(angle) * radius, 26 + hashNoise(index, 145) * 42, Math.cos(angle) * radius);
-    const size = 170 + hashNoise(index, 147) * 110;
+    const size = 200 + hashNoise(index, 147) * 140;
     card.scale.set(size, size * 0.36, 1);
     card.lookAt(0, card.position.y * 0.8, 0);
     sunsetBank.add(card);
@@ -1423,7 +1428,7 @@ export function createSceneEnvironment(
   sunStreak.name = 'poetic-sun-streak';
   sunStreak.rotation.order = 'YXZ';
   sunStreak.rotation.x = -Math.PI / 2;
-  sunStreak.scale.set(150, 640, 1);
+  sunStreak.scale.set(190, 780, 1);
   // Explicit order, not left to depth sorting. See the inner band below.
   sunStreak.renderOrder = 1;
   root.add(sunStreak);
@@ -1433,7 +1438,7 @@ export function createSceneEnvironment(
   sunStreakInner.name = 'poetic-sun-streak-inner';
   sunStreakInner.rotation.order = 'YXZ';
   sunStreakInner.rotation.x = -Math.PI / 2;
-  sunStreakInner.scale.set(62, 300, 1);
+  sunStreakInner.scale.set(80, 380, 1);
   // Two large NormalBlending planes sitting almost on top of each other. Left
   // to depth sorting they tie — at ~344 m out a 1 cm height difference is
   // nothing, and three.js breaks ties by a centroid distance that wobbles as
@@ -1468,7 +1473,8 @@ export function createSceneEnvironment(
     const uniforms = sky.material.uniforms;
     uniforms.turbidity.value = config.fallbackSky.turbidity;
     uniforms.rayleigh.value = config.fallbackSky.rayleigh;
-    uniforms.mieCoefficient.value = 0.006;
+    // 滕王让位日轮：mie 0.006→0.004，压薄太阳周围的亮晕，朱红盘面自己说话。
+    uniforms.mieCoefficient.value = id === 'tengwang' ? 0.004 : 0.006;
     uniforms.mieDirectionalG.value = 0.8;
     uniforms.sunPosition.value.set(...config.sunDirection).normalize().multiplyScalar(100);
     skyMeshes.set(id, sky);
@@ -1744,7 +1750,8 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       sunDisk.position.copy(camera.position).addScaledVector(sunDirTmp, 1600);
       sunDisk.quaternion.copy(camera.quaternion);
       if (skyConfig.sunDisk.soft) {
-        sunDisk.scale.set(skyConfig.sunDisk.size * 1.12, skyConfig.sunDisk.size * 0.88, 1);
+        // 落日椭圆：横向拉长、纵向压扁，比正圆更接近水天线上的真实落日。
+        sunDisk.scale.set(skyConfig.sunDisk.size * 1.18, skyConfig.sunDisk.size * 0.8, 1);
         sunDiskMaterial.uniforms.uSoft.value = 1;
       } else {
         sunDisk.scale.setScalar(skyConfig.sunDisk.size);
@@ -1753,12 +1760,13 @@ async function loadPackageInternal(id: PavilionId): Promise<void> {
       sunDiskMaterial.uniforms.uColor.value.set(skyConfig.sunDisk.color);
       sunDiskMaterial.uniforms.uIntensity.value = skyConfig.sunDisk.intensity;
       // 辉光幕竖在落日方位的地平线上, 只在低日轮楼 (滕王) 亮起。
-      const glowStrength = skyConfig.sunDisk.soft ? 0.85 : 0;
+      // 落霞带：横向铺展（6.5→8.0 倍盘径）、纵向收薄（1.6→1.15），霞光走长不走厚。
+      const glowStrength = skyConfig.sunDisk.soft ? 1.0 : 0;
       horizonGlowMaterial.uniforms.uColor.value.set(skyConfig.sunDisk.color);
       horizonGlowMaterial.uniforms.uIntensity.value = glowStrength;
       horizonGlow.position.set(sunDisk.position.x, 30, sunDisk.position.z);
       horizonGlow.quaternion.copy(camera.quaternion);
-      horizonGlow.scale.set(skyConfig.sunDisk.size * 6.5, skyConfig.sunDisk.size * 1.6, 1);
+      horizonGlow.scale.set(skyConfig.sunDisk.size * 8.0, skyConfig.sunDisk.size * 1.15, 1);
     }
     if (water && !document.hidden) {
       const uniforms = (water.material as THREE.ShaderMaterial).uniforms;
