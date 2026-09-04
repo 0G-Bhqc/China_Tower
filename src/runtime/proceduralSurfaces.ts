@@ -129,11 +129,15 @@ export function createStoneSurfaceTextures(baseColorHex = '#8d8577', size = 1024
       const grain = fbm(x / 22, y / 22, 2);
       const cellTone = 0.9 + hash(cellX, cellY) * 0.18;
       const tone = cellTone * (0.88 + mottle * 0.2) * (0.985 + grain * 0.03);
-      const jointShade = 1 - jointMask * 0.5 - bevel * 0.1;
+      // 缝隙 AO 加深 + 磨边高光：凹缝更沉，相邻一圈被脚步磨亮，
+      // 板面才有“踩出来的”新旧层次。
+      const jointShade = 1 - jointMask * 0.62 - bevel * 0.12;
+      const edgeBand = Math.max(0, 1 - Math.abs(joint - jointHalf * 2.0) / (jointHalf * 1.5));
+      const edgeHi = 1 + edgeBand * 0.05;
       const offset = (y * size + x) * 4;
-      image.data[offset] = Math.min(255, base.r * 255 * tone * jointShade);
-      image.data[offset + 1] = Math.min(255, base.g * 255 * tone * jointShade);
-      image.data[offset + 2] = Math.min(255, base.b * 255 * tone * jointShade);
+      image.data[offset] = Math.min(255, base.r * 255 * tone * jointShade * edgeHi);
+      image.data[offset + 1] = Math.min(255, base.g * 255 * tone * jointShade * edgeHi);
+      image.data[offset + 2] = Math.min(255, base.b * 255 * tone * jointShade * edgeHi);
       image.data[offset + 3] = 255;
     }
   }
@@ -148,8 +152,10 @@ export function createStoneSurfaceTextures(baseColorHex = '#8d8577', size = 1024
         const { cellX, cellY, joint } = cellOf(x, y);
         const jointMask = 1 - Math.min(1, joint / jointHalf);
         // Worn dressing reads semi-polished between the joints; grooves stay
-        // rough and catch dirt.
-        const polish = 0.72 + hash(cellX, cellY) * 0.1 + fbm(x / 70, y / 70, 3) * 0.1;
+        // rough and catch dirt. A second fine grain breaks the large-scale
+        // polish into foot-scale variation so close-ups don't glaze over.
+        const polish = 0.72 + hash(cellX, cellY) * 0.1 + fbm(x / 70, y / 70, 3) * 0.1
+          + fbm(x / 18, y / 18, 2) * 0.06 - 0.03;
         const value = Math.min(255, Math.round((polish + jointMask * 0.2) * 255));
         const offset = (y * size + x) * 4;
         roughImage.data[offset] = value;

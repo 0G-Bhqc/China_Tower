@@ -106,6 +106,15 @@ details p { color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, s
   .poetry-panel { width: 340px; }
   body.poetry-open { --hud-gutter: 366px; }
 }
+/* 横屏平板：收紧左列字号与卡宽，右列导航收窄，避免 1024 级视口左右列互挤。 */
+@media (max-width: 1100px) {
+  h1 { font-size: 60px; }
+  .intro { max-width: 300px; }
+  .scene-reading { width: min(350px, 36vw); }
+  .scene-reading-observation { max-width: 300px; }
+  .pavilion-nav { width: 168px; }
+  .model-meta { display: none; }
+}
 @media (max-width: 700px) {
   .intro { top: 24px; left: 20px; max-width: 250px; }
   h1 { font-size: 52px; }

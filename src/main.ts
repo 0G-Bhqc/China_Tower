@@ -86,7 +86,6 @@ const description = document.querySelector<HTMLElement>('#tower-description');
 const status = document.querySelector<HTMLElement>('#status');
 const cards = [...document.querySelectorAll<HTMLButtonElement>('[data-pavilion]')];
 const explodeButton = document.querySelector<HTMLButtonElement>('#explode');
-const highModelDebugButton = document.querySelector<HTMLButtonElement>('#high-model-debug');
 const toggleDebugScreenshotButton = document.querySelector<HTMLButtonElement>('#toggle-debug-screenshot');
 const lowAngleButton = document.querySelector<HTMLButtonElement>('#low-angle');
 const resetButton = document.querySelector<HTMLButtonElement>('#reset-view');

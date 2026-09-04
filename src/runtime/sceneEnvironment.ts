@@ -1068,7 +1068,27 @@ export function createSceneEnvironment(
   plaza.receiveShadow = true;
   root.add(plaza);
 
-  const skirtMaterial = new THREE.MeshStandardMaterial({ color: 0x7b7566, roughness: 0.98, metalness: 0, side: THREE.DoubleSide });
+  const skirtMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.98, metalness: 0, side: THREE.DoubleSide });
+  // 裙墙水渍：1x64 纵向渐变（上干下湿、底部微绿），圆柱 UV 的 v=0 在底部，
+  // 正好对应画布底行。不动几何不动深度，只给 flat color 一层水线。
+  {
+    const gradCanvas = document.createElement('canvas');
+    gradCanvas.width = 2;
+    gradCanvas.height = 64;
+    const gradCtx = gradCanvas.getContext('2d');
+    if (gradCtx) {
+      const grad = gradCtx.createLinearGradient(0, 0, 0, 64);
+      grad.addColorStop(0, '#7b7566');
+      grad.addColorStop(0.62, '#6e685c');
+      grad.addColorStop(0.85, '#54503f');
+      grad.addColorStop(1, '#424b38');
+      gradCtx.fillStyle = grad;
+      gradCtx.fillRect(0, 0, 2, 64);
+      const gradTexture = new THREE.CanvasTexture(gradCanvas);
+      gradTexture.colorSpace = THREE.SRGBColorSpace;
+      skirtMaterial.map = gradTexture;
+    }
+  }
   const skirt = new THREE.Mesh(
     new THREE.CylinderGeometry(PLAZA_RADIUS + 0.15, PLAZA_RADIUS + 0.55, PLAZA_Y - (WATER_Y - 0.3), 96, 1, true),
     skirtMaterial,
