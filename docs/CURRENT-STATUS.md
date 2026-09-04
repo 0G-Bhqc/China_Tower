@@ -1,9 +1,9 @@
 # China Tower project continuation status
 
-Updated: 2026-09-03 夜收口 (Asia/Shanghai)
+Updated: 2026-09-04 七项优化收口 (Asia/Shanghai)
 Workspace: `E:/Station/China_Tower`
 Branch: `master` (local only, no remote)
-HEAD: `8bb2a6f` (R 键与重置按钮统一走 resetInspection)，工作区干净，`dist/` 已重打并校验通过
+HEAD: `4c5b8ee` + FINAL docs（见 `docs/CONTINUATION-2026-09-04.md`），工作区干净，`dist/` 为根基座正式包（31 文件 / 14 GLB / 0.70GB）
 
 ## What this project is now
 
@@ -31,12 +31,24 @@ Three probe scripts live in `scripts/`, all writing `results.json` under `eviden
 
 | Probe | Result | Run |
 | --- | --- | --- |
-| distant-ranges (3 towers) | PASS — sky strong-signal 4.18 / 5.79 / 3.66% of frame | `run-009` (09-03 夜，polish 后) |
-| godrays-stability (3 towers) | PASS — worst push→pause delta ≤ 2 vs half-gate 338-499 | `run-005` (09-03 夜，polish 后) |
-| frame-stability (3 towers × parked/orbit) | PASS — all checks diffCv ≤ 0.138 vs 0.6 limit | `run-007` (09-03 夜，polish 后) |
-| flicker-dips (3 towers, stop-start drags) | PASS — composited-frame dips 0 / 0 / 0（`culprit-report-*.json`，polish + reset 修复后复测） | 2026-09-03 夜 |
+| distant-ranges (3 towers) | PASS — sky strong-signal 4.33 / 5.88 / 3.84% of frame | `run-013` (09-04 七项后) |
+| godrays-stability (3 towers) | PASS | `run-006` (09-04 七项后) |
+| frame-stability (3 towers × parked/orbit) | PASS | `run-009` (09-04 七项后) |
+| flicker-dips (3 towers, stop-start drags) | PASS — composited-frame dips 0 / 0 / 0（落日/辉光改动后复测） | 2026-09-04 |
+| subpath deploy (`DEPLOY_BASE=/towers/`) | PASS — /towers 下启动、GLB 200、零报错 | 2026-09-04 |
 
 A failed check needs a re-run after the fix, not an argument.
+
+## The 09-04 seven-item round (see `docs/CONTINUATION-2026-09-04.md`)
+
+Nine cues rebuilt on a 晨/日/暮 arc (T3 now 落霞孤鹜 with a dedicated `deepDusk`
+mood); tengwang sunset grandeur pass (disc 460, wider glow, 6 cloud cards, dimmed
+Sky mie); 黄鹤 haze-limit round (fog 0.0011, ridge haze cut); platform bake detail
++ skirt damp gradient + `#model-meta` layer restored; runtime adaptive governor
+(`diagnostics.adaptiveLevel`, `?noadapt=1` bypass); tengwang defaults to lod1
+(395k tris, master hero-only); mobile cheap water; dist pruned to 14 GLBs / 0.70GB;
+subpath deploys via `DEPLOY_BASE` + `npm run deploy`. Nine cue screenshots for
+visual review: `evidence/review-0904-cues/`.
 
 ## The 09-03 night close-out (after the flicker round)
 
@@ -94,8 +106,9 @@ screencast artifact.
    heaviest mood fog of the three (`fogDensity 0.0014` in `TOWER_SKIES`). Lowering fog globally is a
    mood change, not a range fix — do it as its own measured round if attempted.
 2. **No git remote.** Backups go to `G:\我的云端硬盘\China_Tower\<dated>.zip`. Local-only git is a single point of failure.
-   09-03 夜已补 `China_Tower-backup-20260903.zip`（含频闪修复 + 去照片化 + 两轮 polish + R 键统一），与 HEAD 仅差本文档收口提交。
-3. **Chunk size warning** on the main JS bundle (948.91 kB, gzip 262.16 kB, 09-03 夜重打实测). Cosmetic; split if load
+   09-04 会话 G 盘未挂载，改本地双盘：`E:\Station\China_Tower_backups\` + `D:\China_Tower_backups\`
+  （每提交一 bundle 双写，全量 zip 在 B0/P1/FINAL 各一）。G 盘恢复后补全量包。
+3. **Chunk size warning** on the main JS bundle (~949 kB, gzip ~262 kB). Cosmetic; split if load
    times ever matter.
 4. `docs/CONTINUATION-2026-09-02.md` documents the 09-02 session end-to-end (diagnosis →
    crest-anchor bug fix → evidence); `docs/CONTINUATION-2026-09-03.md` does the same for the
