@@ -6,7 +6,7 @@ import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import type { PavilionId } from '../createPavilionGalleryModel';
 import { getSceneSpec, type SceneLayerId, type SceneMood } from './sceneCatalog';
-import { isAbortError, loadVerifiedGlb } from './loadVerifiedGlb';
+import { assetUrl, isAbortError, loadVerifiedGlb } from './loadVerifiedGlb';
 import { createStoneSurfaceTextures, createRockSurfaceTextures, setWorldRepeat } from './proceduralSurfaces';
 import { recolorMeshSurfaces, type SemanticPalette } from './semanticSurfaceRecolor';
 import { createDistantRanges } from './distantRanges';
@@ -72,7 +72,7 @@ type TowerSky = {
 
 const TOWER_SKIES: Record<PavilionId, TowerSky> = {
   yueyang: {
-    file: '/assets/hdri/lakeside_dawn.hdr',
+    file: assetUrl('/assets/hdri/lakeside_dawn.hdr'),
     fogColor: '#a9b2a9', fogDensity: 0.0011,
     waterColor: '#35525c', waterOpacity: 0.92,
     bloomStrength: 0.22,
@@ -92,7 +92,7 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     fallbackSky: { turbidity: 6, rayleigh: 1.8 },
   },
   huanghe: {
-    file: '/assets/hdri/shanghai_riverside.hdr',
+    file: assetUrl('/assets/hdri/shanghai_riverside.hdr'),
     // 晴川专项：雾密度 0.0014→0.0011（与岳阳看齐）。「历历」要的是能见度，
     // 三楼最重的 mood 雾与远景诉求直接矛盾——属 mood 改动，独立量测（见 distant-ranges）。
     fogColor: '#aab4bc', fogDensity: 0.0011,
@@ -114,7 +114,7 @@ const TOWER_SKIES: Record<PavilionId, TowerSky> = {
     fallbackSky: { turbidity: 4.2, rayleigh: 1.2 },
   },
   tengwang: {
-    file: '/assets/hdri/qwantani_dusk_2_puresky.hdr',
+    file: assetUrl('/assets/hdri/qwantani_dusk_2_puresky.hdr'),
     fogColor: '#c7a493', fogDensity: 0.0012,
     // 秋水共长天一色: the dusk water takes a violet-grey tone pulled toward
     // the sky instead of a dark slate, so horizon and lake read as one field.
@@ -902,10 +902,10 @@ function loadStork(onDone: (gltf: { scene: THREE.Group; animations: THREE.Animat
   if (!storkLoader) {
     storkLoader = new GLTFLoader();
     const draco = new DRACOLoader();
-    draco.setDecoderPath('/assets/draco/');
+    draco.setDecoderPath(assetUrl('/assets/draco/'));
     storkLoader.setDRACOLoader(draco);
   }
-  storkLoader.load('/assets/bird/stork.glb', onDone, undefined, onError);
+    storkLoader.load(assetUrl('/assets/bird/stork.glb'), onDone, undefined, onError);
 }
 
 type BirdRecord = {

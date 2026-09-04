@@ -31,7 +31,8 @@
     "convert:max": "node scripts/run-isolated-max-conversion.mjs",
     "verify:max-conversion": "node scripts/verify-isolated-max-conversion.mjs",
     "build:final-html": "node node_modules/typescript/bin/tsc --noEmit && node node_modules/vite/bin/vite.js build && node scripts/build-final-html.mjs && node scripts/verify-final-html.mjs",
-    "verify:final-html": "node scripts/verify-final-html.mjs"
+    "verify:final-html": "node scripts/verify-final-html.mjs",
+    "deploy": "node scripts/deploy-static.mjs"
   },
   "dependencies": {
     "three": "0.179.1"

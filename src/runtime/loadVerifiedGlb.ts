@@ -21,6 +21,14 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+// 子路径部署：运行时资产 URL 统一经这里拼装。Vite 按构建时的 base
+//（`DEPLOY_BASE`，默认 `/`）注入 import.meta.env.BASE_URL；dev 下恒为 `/`，
+// 与原来的根绝对路径行为一致。调用方一律传 `/assets/...` 形式。
+export function assetUrl(path: string): string {
+  const base = import.meta.env.BASE_URL || '/';
+  return `${base.replace(/\/?$/, '/')}${path.replace(/^\//, '')}`;
+}
+
 function disposeScene(scene: THREE.Object3D): void {
   scene.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -58,7 +66,8 @@ async function responseBuffer(response: Response, options: PavilionModelLoadOpti
 }
 
 export async function loadVerifiedGlb(url: string, options: PavilionModelLoadOptions = {}): Promise<GLTF> {
-  if (!url.startsWith('/assets/') || !url.endsWith('.glb')) throw new Error(`Rejected runtime asset URL: ${url}`);
+  // 白名单看路径段而非前缀：子路径部署下 URL 形如 /towers/assets/x.glb。
+  if (!url.includes('/assets/') || !url.endsWith('.glb')) throw new Error(`Rejected runtime asset URL: ${url}`);
   if (options.signal?.aborted) throw abortError();
   const response = await fetch(url, { signal: options.signal, cache: 'force-cache', credentials: 'same-origin' });
   if (!response.ok) throw new Error(`Failed to load ${url}: HTTP ${response.status}`);

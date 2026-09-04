@@ -61,9 +61,9 @@ const release = {
   generatedAt: new Date().toISOString(),
   deployment: {
     entry: 'china-towers.html',
-    basePath: '/',
+    basePath: process.env.DEPLOY_BASE ?? '/',
     mode: 'directory-deployment',
-    runtimeAssetPolicy: 'Verified GLBs are fetched on demand from /assets; this package is not an offline single HTML file.',
+    runtimeAssetPolicy: 'Verified GLBs are fetched on demand from <basePath>/assets; this package is not an offline single HTML file.',
   },
   entryAssets: { script: scriptMatch[1], stylesheet: styleMatch[1] },
   files: inventory,

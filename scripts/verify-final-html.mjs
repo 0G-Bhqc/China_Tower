@@ -27,12 +27,16 @@ assert(
 assert(/id="scene"/.test(html) && /id="explode"/.test(html) && /id="reset-view"/.test(html), 'Deployment HTML is missing a required interaction control.');
 assert(Array.isArray(release.files) && release.files.length > 15, 'Release manifest file inventory is incomplete.');
 const glbs = release.files.filter((file) => file.path.endsWith('.glb'));
+// 子路径部署下入口引用带基座前缀（/towers/assets/x.js），
+// 剥掉 basePath 再落到 dist 相对路径上校验。
+const basePath = release?.deployment?.basePath ?? '/';
+const stripBase = (url) => url.replace(/^\//, '').replace(new RegExp(`^${basePath.replace(/^\//, '').replace(/\/$/, '')}/`), '');
 // 归档裁剪后：三楼成品 + 备用 LOD + 环境包 + 孤鹜 ≈ 14 个；
 // 飞云/蓬莱/review GLB 不得出现（超 1.5GB，白白进部署包）。
 assert(glbs.length >= 10, `Expected at least 10 GLB entries, found ${glbs.length}.`);
 assert(!glbs.some((file) => /feiyun-|penglai-|-semantic-hierarchy\.review\.glb$/.test(file.path)), 'Archived/review GLBs must not ship in dist.');
-for (const resource of [scriptMatch[1], styleMatch[1], '/assets/pavilion-assets.manifest.json']) {
-  await access(resolve(dist, resource.replace(/^\//, '')));
+for (const resource of [scriptMatch[1], styleMatch[1], `${basePath.replace(/\/?$/, '/')}assets/pavilion-assets.manifest.json`]) {
+  await access(resolve(dist, stripBase(resource)));
 }
 for (const file of release.files) {
   const fullPath = resolve(dist, file.path);

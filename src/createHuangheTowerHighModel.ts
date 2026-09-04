@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
-import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
+import { assetUrl, isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { needsSemanticRecolor, recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
 import { applySemanticRelief } from './runtime/semanticRelief';
 
 const HUANGHE_LODS: Record<RuntimeLod, string> = {
-  lod0: '/assets/huanghe-main-tower-highmodel.glb',
-  lod1: '/assets/huanghe-main-tower-lod1.glb',
-  lod2: '/assets/huanghe-main-tower-lod2.glb',
+  lod0: assetUrl('/assets/huanghe-main-tower-highmodel.glb'),
+  lod1: assetUrl('/assets/huanghe-main-tower-lod1.glb'),
+  lod2: assetUrl('/assets/huanghe-main-tower-lod2.glb'),
 };
 
 // Degrade one LOD at a time from the tier's preferred asset so a failed fetch

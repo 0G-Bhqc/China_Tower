@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PAVILION_SPECS } from './createPavilionGalleryModel';
 import { detectDeviceQualityProfile, selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
-import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
+import { assetUrl, isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { computeStructuralBaseY } from './runtime/grounding';
 import { createPlaqueMesh, type PlaqueSpec } from './runtime/createPlaqueMesh';
@@ -163,14 +163,14 @@ function mergeAssemblyByMaterial(assembly: THREE.Group): number {
 }
 
 const TENGWANG_LODS: Record<RuntimeLod, string> = {
-  lod0: '/assets/tengwang-main-tower-highmodel.glb',
-  lod1: '/assets/tengwang-main-tower-lod1.glb',
-  lod2: '/assets/tengwang-main-tower-lod2.glb',
+  lod0: assetUrl('/assets/tengwang-main-tower-highmodel.glb'),
+  lod1: assetUrl('/assets/tengwang-main-tower-lod1.glb'),
+  lod2: assetUrl('/assets/tengwang-main-tower-lod2.glb'),
 };
 
 // High-precision source: 3D资产/滕王阁（1）/3d66.com_22753718.max
 // Convert to GLB and place at: public/assets/tengwang-high-precision/tengwang-22753718.glb
-const TENGWANG_HIGH_PRECISION_GLB = '/assets/tengwang-high-precision/tengwang-22753718.glb';
+const TENGWANG_HIGH_PRECISION_GLB = assetUrl('/assets/tengwang-high-precision/tengwang-22753718.glb');
 
 // Tengwang reads as dark grey-green tile roofs on strong vermilion work.
 const TENGWANG_SEMANTIC_PALETTE: SemanticPalette = {

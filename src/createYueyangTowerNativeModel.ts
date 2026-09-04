@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
-import { isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
+import { assetUrl, isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { recolorMeshSurfaces, type SemanticPalette } from './runtime/semanticSurfaceRecolor';
 import { applySemanticRelief } from './runtime/semanticRelief';
 
 const YUEYANG_LODS: Record<RuntimeLod, string> = {
-  lod0: '/assets/yueyang-architectural-lod.glb',
-  lod1: '/assets/yueyang-architectural-lod1.glb',
-  lod2: '/assets/yueyang-architectural-lod2.glb',
+  lod0: assetUrl('/assets/yueyang-architectural-lod.glb'),
+  lod1: assetUrl('/assets/yueyang-architectural-lod1.glb'),
+  lod2: assetUrl('/assets/yueyang-architectural-lod2.glb'),
 };
 
 // Degrade one LOD at a time from the tier's preferred asset so a failed fetch

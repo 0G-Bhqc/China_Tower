@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PavilionId } from '../createPavilionGalleryModel';
+import { assetUrl } from './loadVerifiedGlb';
 
 export type SceneLayerId = 'near' | 'mid' | 'far';
 
@@ -80,7 +81,7 @@ export const SCENE_CATALOG: Record<PavilionId, ScenePackageSpec> = {
     ],
   },
   huanghe: {
-    id: 'huanghe', sourceLabel: '审计 FBX · 主楼外缘场地构件', packageUrl: '/assets/scene-pack/huanghe-environment.glb', packageReport: '/evidence/scene-packs/huanghe-environment.json', packageStatus: 'source-backed', availableLayers: ['near', 'mid'], sceneCenter: [0, 0, 0], defaultWater: { position: [0, -0.08, -27], size: [110, 45], rotation: [-Math.PI / 2, 0, 0] },
+    id: 'huanghe', sourceLabel: '审计 FBX · 主楼外缘场地构件', packageUrl: assetUrl('/assets/scene-pack/huanghe-environment.glb'), packageReport: '/evidence/scene-packs/huanghe-environment.json', packageStatus: 'source-backed', availableLayers: ['near', 'mid'], sceneCenter: [0, 0, 0], defaultWater: { position: [0, -0.08, -27], size: [110, 45], rotation: [-Math.PI / 2, 0, 0] },
     cues: [
       { id: 'white-clouds', title: '白云千载', line: '白云千载空悠悠', observation: '仰起头沿檐口上行：五层飞檐刺破晨云，千年只在此一望。', sceneAnchor: 'tower-roofline', anchor: [0, 18, 0], focus: 'tower', camera: { position: [27, 16, 33], target: [0, 22, -4] }, mood: dawn },
       { id: 'clear-river', title: '晴川远望', line: '晴川历历汉阳树，芳草萋萋鹦鹉洲', observation: '日光正好，江雾散尽——把视线交给远岸，历历汉阳树，萋萋鹦鹉洲。', sceneAnchor: 'river-horizon', anchor: [0, 4, -40], focus: 'horizon', camera: { position: [31, 11, 20], target: [-2, 9, -18] }, mood: clearDay },

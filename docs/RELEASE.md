@@ -4,6 +4,13 @@
 
 运行 `npm run build:final-html`，部署整个 [`dist`](dist) 目录到站点根路径 `/`，入口为 `china-towers.html`（或 `index.html`）。发布清单 [`dist/china-towers.release.json`](dist/china-towers.release.json) 记录每个交付文件的 SHA-256 和字节数。
 
+## 一键部署与子路径
+
+- 一键：`npm run deploy`（构建 + 归档裁剪 + 契约校验 + 缓存/nginx 配置输出一次给全）。
+- 子路径：`DEPLOY_BASE=/towers/ npm run deploy`（首尾斜杠都要有），把 `dist/` 搬到站点 `/towers/` 下即可；
+  JS/CSS 引用与运行时 `/assets` 拉取自动收敛到同一基座（`assetUrl()`），无需改代码重写路径。
+- 旧的根部署说明（`npm run build:final-html` + 搬 `dist/` 到 `/`）继续有效，是 `DEPLOY_BASE=/` 的特例。
+
 这是目录部署，不是离线单 HTML：本轮成品只启用岳阳楼、黄鹤楼与滕王阁，按选择的设备质量档从 `/assets` 按需获取对应高模。飞云楼与蓬莱阁的源 GLB、清单和研究文档仍保留在仓库中，但不进入成品导航。入口使用根绝对路径，若要部署到子目录，需先调整 Vite `base` 并重新构建。
 
 建议的服务器策略：HTML 使用 `no-cache`；带哈希的 JS/CSS 可长期缓存；GLB 返回 `model/gltf-binary`。只有在部署目录带版本或能按发布清单清理旧缓存时，才为固定文件名的 GLB 使用 `immutable` 缓存策略。
