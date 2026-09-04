@@ -27,7 +27,10 @@ assert(
 assert(/id="scene"/.test(html) && /id="explode"/.test(html) && /id="reset-view"/.test(html), 'Deployment HTML is missing a required interaction control.');
 assert(Array.isArray(release.files) && release.files.length > 15, 'Release manifest file inventory is incomplete.');
 const glbs = release.files.filter((file) => file.path.endsWith('.glb'));
-assert(glbs.length >= 15, `Expected at least 15 GLB entries, found ${glbs.length}.`);
+// 归档裁剪后：三楼成品 + 备用 LOD + 环境包 + 孤鹜 ≈ 14 个；
+// 飞云/蓬莱/review GLB 不得出现（超 1.5GB，白白进部署包）。
+assert(glbs.length >= 10, `Expected at least 10 GLB entries, found ${glbs.length}.`);
+assert(!glbs.some((file) => /feiyun-|penglai-|-semantic-hierarchy\.review\.glb$/.test(file.path)), 'Archived/review GLBs must not ship in dist.');
 for (const resource of [scriptMatch[1], styleMatch[1], '/assets/pavilion-assets.manifest.json']) {
   await access(resolve(dist, resource.replace(/^\//, '')));
 }

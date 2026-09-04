@@ -60,3 +60,78 @@ export function selectAvailableLod(available: Partial<Record<RuntimeLod, string>
   if (available.lod2) return 'lod2';
   throw new Error('No runtime LOD URL is available');
 }
+
+// --- 运行时自适应降载 ------------------------------------------------------
+// 加载定档只看静态信号（视口/内存/核数），进场景后的真实帧率无人看管：
+// 高端机白白跑满、低端机一路卡顿。自适应 governor 看帧时间 EMA 的 2.5s
+// 窗口均值，慢了逐级降载、快了带迟滞回升（连续 3 个快窗口才升一级）。
+// 降载阶梯（只走可用项拼出的有效阶梯，无 bloom 的档自动跳过 bloom 级）：
+//   DPR x0.85 → 关 bloom → 关 godrays → DPR x0.7
+// 前两个窗口是着色器编译期，不参与判决；`?noadapt=1` 整段旁路（探针确定性）。
+export type AdaptiveState = {
+  level: number;
+  pixelRatioScale: number;
+  bloomOn: boolean;
+  godRaysOn: boolean;
+};
+
+export function createAdaptiveGovernor(options: {
+  bloomAvailable: boolean;
+  godRaysAvailable: boolean;
+  onLevel?: (state: AdaptiveState) => void;
+}): { update: (frameMs: number) => void; level: number; disabled: boolean } {
+  const disabled = new URLSearchParams(window.location.search).get('noadapt') === '1';
+  const ladder: AdaptiveState[] = [
+    { level: 0, pixelRatioScale: 1, bloomOn: options.bloomAvailable, godRaysOn: options.godRaysAvailable },
+    { level: 1, pixelRatioScale: 0.85, bloomOn: options.bloomAvailable, godRaysOn: options.godRaysAvailable },
+    { level: 2, pixelRatioScale: 0.85, bloomOn: false, godRaysOn: options.godRaysAvailable },
+    { level: 3, pixelRatioScale: 0.85, bloomOn: false, godRaysOn: false },
+    { level: 4, pixelRatioScale: 0.7, bloomOn: false, godRaysOn: false },
+  ].filter((rung, index, all) => {
+    if (index === 0) return true;
+    const prev = all[index - 1];
+    return rung.pixelRatioScale !== prev.pixelRatioScale
+      || rung.bloomOn !== prev.bloomOn
+      || rung.godRaysOn !== prev.godRaysOn;
+  }).map((rung, index) => ({ ...rung, level: index }));
+  let level = 0;
+  let windowSum = 0;
+  let windowCount = 0;
+  let windowStart = performance.now();
+  let windowsSeen = 0;
+  let fastWindows = 0;
+  const SLOW_MS = 26;
+  const FAST_MS = 14;
+  const WINDOW_MS = 2500;
+  const WARMUP_WINDOWS = 2;
+  return {
+    get level() { return level; },
+    disabled,
+    update(frameMs: number): void {
+      if (disabled) return;
+      windowSum += frameMs;
+      windowCount += 1;
+      if (performance.now() - windowStart < WINDOW_MS) return;
+      const average = windowSum / Math.max(1, windowCount);
+      windowSum = 0;
+      windowCount = 0;
+      windowStart = performance.now();
+      windowsSeen += 1;
+      if (windowsSeen <= WARMUP_WINDOWS) return;
+      if (average > SLOW_MS && level < ladder.length - 1) {
+        level += 1;
+        fastWindows = 0;
+        options.onLevel?.(ladder[level]);
+      } else if (average < FAST_MS && level > 0) {
+        fastWindows += 1;
+        if (fastWindows >= 3) {
+          level -= 1;
+          fastWindows = 0;
+          options.onLevel?.(ladder[level]);
+        }
+      } else {
+        fastWindows = 0;
+      }
+    },
+  };
+}

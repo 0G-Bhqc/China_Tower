@@ -11,9 +11,12 @@
 ## 质量与调试参数
 
 - 默认：设备检测选择 Standard 或 Mobile。
-- `?quality=hero`：LOD0、DPR 上限 1.75、2048 软阴影。
-- `?quality=standard`：LOD1、DPR 上限 1.35、1536 软阴影。
-- `?quality=mobile`：LOD2、DPR 上限 1、768 低成本阴影。
+- `?quality=hero`：LOD0、DPR 上限 1.75、4096 软阴影。
+- `?quality=standard`：LOD1、DPR 上限 1.35、2048 软阴影。
+- `?quality=mobile`：LOD2、DPR 上限 1、768 低成本阴影、无镜面水（廉价水面代替）。
+- 运行时自适应：帧时间 2.5s 窗口均值超 26ms 逐级降载（DPR×0.85 → 关 bloom → 关 godrays → DPR×0.7），
+  快窗口连续 3 个才回升；档位进 diagnostics `adaptiveLevel`；`?noadapt=1` 旁路保探针确定性。
+- 滕王阁 426MB 高精 master 只在 `?quality=hero` 加载，默认 standard 走 LOD1（8.9MB）；`?lod=` 可强制任意档。
 - `?pavilion=yueyang|huanghe|tengwang` 选择本轮成品楼阁；`feiyun` 与 `penglai` 旧参数会回退到岳阳楼；`?lod=lod0|lod1|lod2` 仅用于受控审查。
 - `?view=front|three-quarter|right|rear|left|elevated|low-angle` 用于固定审查视角；界面“仰视建筑”或快捷键 V 可进入低机位。
 - `?view=front|three-quarter|right|rear|left|elevated` 与 `?light=reference|neutral|grazing` 用于视觉证据捕获。
@@ -37,5 +40,6 @@ npm run smoke:runtime-loading
 - 本轮成品固定为岳阳楼、黄鹤楼、滕王阁三座。蓬莱阁暂列待修复展品，已知围护结构缺失、场景合并过度和体量过大；飞云楼按范围要求剔除。
 - 通用程序化楼阁仅用于三座高模加载失败时的明确降级视图，不作为独立展品。
 - 页面内容以楼阁对应诗文为主叙事：每座楼包含主篇、关联篇、原文节选、释义、建筑关联赏析和来源字段。
-- Vite 仍报告主入口压缩前约 613 kB，属于后续可优化项；当前通过按楼阁模块动态导入与 GLB LOD 降级控制首个所选资产的加载压力。
+- Vite 仍报告主入口压缩前约 950 kB，属于后续可优化项；当前通过按楼阁模块动态导入与 GLB LOD 降级控制首个所选资产的加载压力。
+- 部署包已裁剪飞云/蓬莱归档与 review GLB（约 1.5GB 不进 dist），成品约 14 个 GLB（~0.7GB，以滕王高精 master 为主）。
 - 若高模 GLB 失败，应用会明确显示降级视图并保留研究模型交互，不会将后备模型标为高模成功。

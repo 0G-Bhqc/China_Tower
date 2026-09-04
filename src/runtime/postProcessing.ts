@@ -151,9 +151,13 @@ function applyPreset(shaderPass: ShaderPass, preset: GradePreset): void {
 
 export type PostStack = {
   setBloomStrength: (strength: number) => void;
+  // 自适应降载开关：pass.enabled=false 时 composer 整段跳过，
+  // 比 strength=0 更省（bloom 的 5 级 mip 模糊一个不做）。
+  setBloomEnabled: (enabled: boolean) => void;
   setGrade: (preset: TowerGradePreset) => void;
   setMoodBias: (bias: { tint: [number, number, number]; exposure: number } | null) => void;
   setGodRays: (sunDirection: THREE.Vector3, strength: number, sunColor: string) => void;
+  setGodRaysEnabled: (enabled: boolean) => void;
   setGodRaysExcluded: (objects: Array<THREE.Object3D | null>) => void;
   setSize: (width: number, height: number) => void;
   render: () => void;
@@ -233,6 +237,9 @@ export function createPostStack(
     setBloomStrength: (strength: number) => {
       if (bloomPass) bloomPass.strength = strength;
     },
+    setBloomEnabled: (enabled: boolean) => {
+      if (bloomPass) bloomPass.enabled = enabled;
+    },
     setGrade: (preset: TowerGradePreset) => {
       applyPreset(gradePass, TOWER_GRADE_PRESETS[preset]);
     },
@@ -243,6 +250,9 @@ export function createPostStack(
       godRaysPass?.setSunDirection(sunDirection);
       godRaysPass?.setSunColor(sunColor);
       godRaysPass?.setStrength(strength);
+    },
+    setGodRaysEnabled: (enabled: boolean) => {
+      if (godRaysPass) godRaysPass.enabled = enabled;
     },
     setGodRaysExcluded: (objects: Array<THREE.Object3D | null>) => {
       godRaysPass?.setExcluded(objects);

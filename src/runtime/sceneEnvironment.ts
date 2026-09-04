@@ -1043,9 +1043,9 @@ export function createSceneEnvironment(
 
   // --- Terrace plaza (near field) --------------------------------------
   // Paving bakes cost real startup time (fbm per pixel), so hero gets the
-  // 2048px master and standard stays at 1536 — slab joints and per-slab tone
-  // survive the difference, the bake does not quadruple.
-  const stoneTextures = createStoneSurfaceTextures('#97907e', quality === 'hero' ? 2048 : 1536);
+  // 2048px master, standard stays at 1536, mobile drops to 768 — slab joints
+  // and per-slab tone survive the difference, the bake does not quadruple.
+  const stoneTextures = createStoneSurfaceTextures('#97907e', quality === 'hero' ? 2048 : quality === 'standard' ? 1536 : 768);
   const plazaWorldSize = PLAZA_RADIUS * 2;
   setWorldRepeat(stoneTextures.albedo, 4.25, plazaWorldSize);
   setWorldRepeat(stoneTextures.roughness, 4.25, plazaWorldSize);
@@ -1188,7 +1188,26 @@ export function createSceneEnvironment(
 
   // --- Water (middle field, runs to the fogged horizon) -----------------
   let water: Water | null = null;
-  if (quality !== 'mobile') {
+  if (quality === 'mobile') {
+    // 移动廉价水：无镜面反射，只吃解析光高光 + 雾。 detachment-free：
+    // 一片 MeshStandardMaterial 水色平面，掠射角仍有太阳碎光可读，
+    // 代价是一次普通绘制，而不是整场景镜像重渲染。
+    const cheapWater = new THREE.Mesh(
+      new THREE.PlaneGeometry(WATER_HALF_EXTENT * 2, WATER_HALF_EXTENT * 2),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(TOWER_SKIES.yueyang.waterColor),
+        roughness: 0.18,
+        metalness: 0.55,
+        transparent: true,
+        opacity: 0.9,
+        fog: true,
+      }),
+    );
+    cheapWater.name = 'poetic-river-or-lake';
+    cheapWater.rotation.x = -Math.PI / 2;
+    cheapWater.position.y = WATER_Y;
+    root.add(cheapWater);
+  } else {
     water = new Water(new THREE.PlaneGeometry(WATER_HALF_EXTENT * 2, WATER_HALF_EXTENT * 2), {
       // Real-time planar reflection. Cost is bought back with *resolution*,
       // never with update rate — see the note on the mirror below.
@@ -1577,6 +1596,11 @@ export function createSceneEnvironment(
       waterMaterial.uniforms.sunColor.value.set(config.sunColor);
       waterMaterial.uniforms.sunDirection.value.set(...config.sunDirection).normalize();
       waterMaterial.uniforms.distortionScale.value = 1.9;
+    } else {
+      // 移动廉价水没有 uniforms，换楼时直接改材质色，跟上每楼水色。
+      const cheap = root.getObjectByName('poetic-river-or-lake');
+      const cheapMaterial = (cheap as THREE.Mesh | null)?.material as THREE.MeshStandardMaterial | null;
+      cheapMaterial?.color.set(config.waterColor);
     }
     birdFlock.group.visible = id === 'tengwang';
     sunsetBank.visible = id === 'tengwang';

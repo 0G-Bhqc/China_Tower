@@ -18,7 +18,7 @@ import {
   type PavilionId,
   type PavilionSpec,
 } from './createPavilionGalleryModel';
-import { detectDeviceQualityProfile } from './runtime/DeviceQualityProfile';
+import { detectDeviceQualityProfile, createAdaptiveGovernor } from './runtime/DeviceQualityProfile';
 import type { PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { getPavilionAssemblyRuntime } from './runtime/PavilionAssemblyRuntime';
 
@@ -40,6 +40,8 @@ declare global {
       qualityProfile: 'hero' | 'standard' | 'mobile';
       pixelRatioCap: number;
       appliedPixelRatio: number;
+      // 自适应降载档位（0=满载，见 DeviceQualityProfile governor）。
+      adaptiveLevel: number;
       shadowMapSize: number;
       shadowTechnique: 'pcf-soft' | 'pcf';
       shadowRadius: number;
@@ -198,6 +200,29 @@ postStack?.setGodRaysExcluded([
   poeticEnvironment.root.getObjectByName('poetic-river-or-lake') ?? null,
   atmosphere.root,
 ]);
+
+// 运行时自适应：加载定档之后，帧率说了算。慢窗口逐级降载
+//（DPR→bloom→godrays→DPR），快窗口带迟滞回升；`?noadapt=1` 旁路保探针确定性。
+const adaptiveGovernor = createAdaptiveGovernor({
+  bloomAvailable: deviceQuality.id !== 'mobile' && reviewParams.get('nobloom') !== '1',
+  godRaysAvailable: deviceQuality.id !== 'mobile' && reviewParams.get('norays') !== '1',
+  onLevel: (state) => {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, deviceQuality.pixelRatioCap * state.pixelRatioScale));
+    // DPR 换了绘制缓冲尺寸必须跟上：逐帧 resize 按 CSS 尺寸早退，
+    // 看不到 pixelRatio 变化，这里手动推一次。
+    renderer.setSize(sceneCanvas.clientWidth, sceneCanvas.clientHeight, false);
+    postStack?.setSize(sceneCanvas.clientWidth, sceneCanvas.clientHeight);
+    postStack?.setBloomEnabled(state.bloomOn);
+    postStack?.setGodRaysEnabled(state.godRaysOn);
+    (window as unknown as { __ADAPTIVE_LEVEL__?: number }).__ADAPTIVE_LEVEL__ = state.level;
+    if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
+      window.__CHINA_TOWERS_DIAGNOSTICS__.adaptiveLevel = state.level;
+      window.__CHINA_TOWERS_DIAGNOSTICS__.appliedPixelRatio = renderer.getPixelRatio();
+    }
+    // 状态行不碰：诗境机位/仰视等状态文案优先，档位只进 diagnostics，
+    // 探针读数，界面不添乱。
+  },
+});
 
 // 诗文抽屉 + 场景碑匾:碑匾立于广场前侧缘,随楼切换显隐,点击开对应篇目。
 const poetryPanel = createPoetryPanel();
@@ -684,6 +709,7 @@ function activateModel(model: THREE.Group, spec: PavilionSpec) {
     qualityProfile: deviceQuality.id,
     pixelRatioCap: deviceQuality.pixelRatioCap,
     appliedPixelRatio: renderer.getPixelRatio(),
+    adaptiveLevel: 0,
     shadowMapSize: deviceQuality.shadowMapSize,
     shadowTechnique: deviceQuality.shadowTechnique,
     shadowRadius: deviceQuality.shadowRadius,
@@ -763,6 +789,7 @@ async function selectPavilion(id: PavilionId) {
       qualityProfile: deviceQuality.id,
       pixelRatioCap: deviceQuality.pixelRatioCap,
       appliedPixelRatio: renderer.getPixelRatio(),
+      adaptiveLevel: 0,
       shadowMapSize: deviceQuality.shadowMapSize,
       shadowTechnique: deviceQuality.shadowTechnique,
       shadowRadius: deviceQuality.shadowRadius,
@@ -1006,6 +1033,12 @@ function render() {
   }
   if (postStack) postStack.render();
   else renderer.render(scene, camera);
+  // 自适应 governor 吃帧间隔（含 composer 全开销），判决下一帧档位。
+  // frameDelta 取自本帧开头（上一帧到本帧的真实间隔），正是要的负载信号。
+  adaptiveGovernor.update(frameDelta * 1000);
+  if (window.__CHINA_TOWERS_DIAGNOSTICS__) {
+    window.__CHINA_TOWERS_DIAGNOSTICS__.adaptiveLevel = adaptiveGovernor.level;
+  }
   const assemblyRuntime = getPavilionAssemblyRuntime(activeModel);
   if (assemblyRuntime && Math.abs(explodedTarget - explodedAmount) > 0.001) {
     explodedAmount = THREE.MathUtils.lerp(explodedAmount, explodedTarget, 0.14);

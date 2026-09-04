@@ -555,14 +555,15 @@ export function createTengwangTowerHighModel(loadOptions: PavilionModelLoadOptio
   root.name = 'tengwang-highmodel-root';
   root.userData.sculptRuntime = { nodes: { root }, meshes: {}, sockets: {}, colliders: {}, destructionGroups: { tower: [] } };
 
-  // Asset selection. The 滕王阁 complex is the showpiece — the 426MB high-
-  // precision master runs on hero AND standard desktops (quality complaints
-  // about the decimated semantic LODs outweighed the download); only the
-  // mobile tier degrades to the small semantic GLB. ?lod= still forces a tier
-  // and every stage falls back to the next on failure.
+  // Asset selection. The 426MB high-precision master loads only on explicit
+  // hero (`?quality=hero`); standard defaults to the 8.9MB lod1 tier with a
+  // lod2 fallback. The master stays one click away for review, but it must
+  // not be the default download — 8M triangles as a first paint crashes
+  // exactly the mid-range machines 自适应 is trying to save. `?lod=` still
+  // forces any tier and every stage falls back to the next on failure.
   const forcedLod = new URLSearchParams(window.location.search).get('lod');
   const qualityId = detectDeviceQualityProfile().id;
-  const useHighPrecision = qualityId !== 'mobile' && !forcedLod;
+  const useHighPrecision = qualityId === 'hero' && !forcedLod;
   const preferredLod = selectAvailableLod(TENGWANG_LODS);
   root.userData.runtimeLod = useHighPrecision ? 'lod0hp' : preferredLod;
   const fallbackSpec = PAVILION_SPECS.find((spec) => spec.id === 'tengwang');

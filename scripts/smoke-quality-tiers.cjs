@@ -9,8 +9,10 @@ const evidenceRoot = path.join(workspace, 'evidence', '3d-assets', 'runtime-qual
 const browserExecutable = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const contentTypes = { '.css': 'text/css', '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.glb': 'model/gltf-binary' };
 const expectations = {
-  hero: { runtimeLod: 'lod0', pixelRatioCap: 1.75, shadowMapSize: 2048, shadowTechnique: 'pcf-soft', shadowRadius: 5, shadowBlurSamples: 16, toneMappingExposure: 1.05, environmentIntensity: 1.12 },
-  standard: { runtimeLod: 'lod1', pixelRatioCap: 1.35, shadowMapSize: 1536, shadowTechnique: 'pcf-soft', shadowRadius: 3, shadowBlurSamples: 8, toneMappingExposure: 1.02, environmentIntensity: 1 },
+  // 真值见 DeviceQualityProfile.ts（曾与代码漂移：hero 2048/radius 5、
+  // standard 1536/radius 3 是过期数，smoke 照着旧数必失败）。
+  hero: { runtimeLod: 'lod0', pixelRatioCap: 1.75, shadowMapSize: 4096, shadowTechnique: 'pcf-soft', shadowRadius: 3.5, shadowBlurSamples: 16, toneMappingExposure: 1.05, environmentIntensity: 1.12 },
+  standard: { runtimeLod: 'lod1', pixelRatioCap: 1.35, shadowMapSize: 2048, shadowTechnique: 'pcf-soft', shadowRadius: 2.5, shadowBlurSamples: 8, toneMappingExposure: 1.02, environmentIntensity: 1 },
   mobile: { runtimeLod: 'lod2', pixelRatioCap: 1, shadowMapSize: 768, shadowTechnique: 'pcf', shadowRadius: 1, shadowBlurSamples: 4, toneMappingExposure: 0.98, environmentIntensity: 0.9 },
 };
 
@@ -36,6 +38,10 @@ function assertProfile(profile, diagnostics) {
   }
   if (diagnostics.appliedPixelRatio > diagnostics.pixelRatioCap) {
     throw new Error(`${profile} pixel ratio cap exceeded: ${diagnostics.appliedPixelRatio} > ${diagnostics.pixelRatioCap}`);
+  }
+  // 自适应档位必须上报（探针机上保持 0；慢机上报 >0 才是 governor 活着的证据）。
+  if (typeof diagnostics?.adaptiveLevel !== 'number') {
+    throw new Error(`${profile} adaptiveLevel missing from diagnostics`);
   }
 }
 
