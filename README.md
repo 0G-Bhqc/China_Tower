@@ -2,6 +2,14 @@
 
 Three.js 中国楼阁高精度三维展示项目，包含岳阳楼、黄鹤楼、滕王阁三座经 DCC 高模解析的楼阁。
 
+## 预览
+
+![滕王阁 · 落日](docs/screenshots/tengwang.png)
+
+![岳阳楼](docs/screenshots/yueyang.png)
+
+![黄鹤楼](docs/screenshots/huanghe.png)
+
 ## 快速开始
 
 ```bash
@@ -120,4 +128,4 @@ pnpm preview
 
 ## License
 
-内部项目，仅供学习研究使用。
+MIT，见 [LICENSE](LICENSE)。
