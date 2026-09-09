@@ -16,6 +16,9 @@ Three.js 中国楼阁高精度三维展示项目，包含岳阳楼、黄鹤楼�
 # 安装依赖
 pnpm install
 
+# 拉取运行时 3D 资产（约 350MB，Release 一键下载+校验，详见 docs/ASSETS.md）
+pnpm assets
+
 # 开发服务器
 pnpm dev
 

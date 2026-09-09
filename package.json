@@ -7,6 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
+    "assets": "node scripts/fetch-assets.mjs",
+    "assets:pack": "node scripts/package-asset-pack.mjs",
     "validate:asset-pipeline": "node scripts/validate-asset-pipeline.mjs",
     "validate:source-hashes": "node scripts/validate-asset-pipeline.mjs --verify-hashes",
     "generate:runtime-manifest": "node scripts/generate-runtime-asset-manifest.mjs",
