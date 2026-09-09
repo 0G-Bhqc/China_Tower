@@ -7,6 +7,7 @@ dist/
 # Large immutable evidence & DCC sources (kept on disk, never committed)
 evidence/
 backup/
+asset-pack/
 3D资产/
 *.zip
 
