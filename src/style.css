@@ -1,168 +1,216 @@
 :root {
   --accent: #d58b42;
-  --ink: #201a16;
-  --muted: #6c665d;
-  --paper: rgba(248, 247, 240, .92);
-  --line: rgba(53, 48, 42, .18);
+  --accent-deep: color-mix(in srgb, var(--accent) 68%, #3a2415);
+  --ink: #241b13;
+  --ink-soft: #4c4136;
+  --muted: #7a6f60;
+  --paper: rgba(250, 247, 236, .9);
+  --paper-solid: #faf7ec;
+  --line: rgba(58, 48, 36, .16);
+  --gold: #a8894e;
+  --cinnabar: #b23a2a;
+  --shadow: 0 18px 48px rgba(46, 38, 28, .16);
+  --shadow-soft: 0 10px 28px rgba(46, 38, 28, .1);
   color: var(--ink);
-  background: #dfe6e2;
+  background: #e8e4d8;
   font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
   font-synthesis: none;
 }
 * { box-sizing: border-box; }
-/* Right-hand HUD gutter: relaxes to the viewport edge while the poetry drawer
-   is closed, widens to clear the 370px panel while it is open (poetryPanel.ts
-   toggles body.poetry-open). */
-:root { --hud-gutter: 26px; }
-body.poetry-open { --hud-gutter: 418px; }
-html, body, #scene { width: 100%; height: 100%; margin: 0; }
-body { overflow: hidden; background: #dfe6e2; }
+::selection { background: rgba(178, 58, 42, .22); }
 button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 按压回弹: 所有纸面按钮统一的触感。 */
+.scene-cue-buttons button:active, .controls button:active, .pavilion-nav button:active { transform: translateY(0) scale(.98); }
+:root { --hud-gutter: 28px; }
+body.poetry-open { --hud-gutter: 420px; }
+html, body, #scene { width: 100%; height: 100%; margin: 0; }
+body { overflow: hidden; background: #e8e4d8; }
 #scene { display: block; touch-action: none; }
-.shell { position: fixed; inset: 0; pointer-events: none; }
-.loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(223, 230, 226, .95); z-index: 50; transition: opacity .35s ease; }
+.shell { position: fixed; inset: 0; pointer-events: none; animation: shell-in 1.1s ease both; }
+@keyframes shell-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* 纱幕: 顶部赭黄渐隐保证题字可读, 底部暖灰托住控制台, 皆不拦截指针。 */
+.scrim { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 1; }
+.scrim-top { top: 0; height: 38vh; background: linear-gradient(180deg, rgba(244,239,224,.88) 0%, rgba(244,239,224,.42) 45%, transparent 100%); }
+.scrim-bottom { bottom: 0; height: 34vh; background: linear-gradient(0deg, rgba(238,233,218,.82) 0%, rgba(238,233,218,.35) 45%, transparent 100%); }
+/* 入诗黑边: 极淡的电影感, 只在 body.in-cue 出现。 */
+.letterbox { position: absolute; left: 0; right: 0; height: 0; background: rgba(18,13,9,.82); z-index: 6; transition: height .8s cubic-bezier(.22,.8,.24,1); pointer-events: none; }
+.letterbox-top { top: 0; }
+.letterbox-bottom { bottom: 0; }
+body.in-cue .letterbox { height: 4.5vh; }
+
+.loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(120% 90% at 50% 18%, #f4efe0 0%, #e8e4d8 55%, #d5cfbb 100%); z-index: 50; transition: opacity .45s ease; }
 .loader[hidden] { display: none; }
-.loader-inner { text-align: center; }
-.loader-brand { font-size: 46px; letter-spacing: .12em; }
-.loader-sub, .loader-status { margin-top: 8px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 10px; font-weight: 800; letter-spacing: .2em; color: #776653; }
-.loader-track { margin: 18px auto 0; width: 220px; height: 2px; background: rgba(55,45,36,.14); overflow: hidden; }
-.loader-bar { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
-.intro { position: absolute; top: 54px; left: 6vw; max-width: 350px; }
-.eyebrow, .english, .location, .description, .status, footer, .pavilion-nav button, .controls button, .poetry-panel, .content-tabs, .panel-kicker, .poem-label, .poem-byline, .source-line, .meta-key, .meta-value { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-.eyebrow { margin: 0 0 18px; color: #776653; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
-h1 { margin: 0; font-size: 76px; font-weight: 500; line-height: .9; letter-spacing: .06em; }
-.english { margin: 16px 0 0; font-size: 11px; font-weight: 800; letter-spacing: .2em; }
-.location { margin: 14px 0 0; color: color-mix(in srgb, var(--accent) 78%, #46392e); font-size: 11px; font-weight: 750; letter-spacing: .08em; }
-.description { margin: 14px 0 0; color: #62584e; font-size: 13px; line-height: 1.75; }
-.scene-reading { position: absolute; left: 6vw; bottom: 146px; width: min(410px, 38vw); padding: 14px 18px 15px 16px; border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(247,246,239,.72), rgba(247,246,239,.22)); backdrop-filter: blur(5px); pointer-events: auto; z-index: 4; opacity: 0; transform: translateY(10px); transition: opacity .45s ease, transform .45s ease; }
+.loader-inner { text-align: center; animation: loader-in 1s ease both; }
+@keyframes loader-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* 书法题字: 与 index.html 首屏内联样式同构, 此处叠加笔锋呼吸与进度微光。 */
+.loader-calligraphy { display: flex; align-items: flex-start; justify-content: center; gap: 14px; }
+.loader-brand { font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif; font-size: clamp(72px, 11vw, 104px); line-height: 1; letter-spacing: .06em; }
+.loader-brand span { display: inline-block; background: linear-gradient(165deg, #4a3826 8%, #2b2118 45%, #14100b 90%); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 14px 34px rgba(90,64,28,.16); animation: ink-breathe 4.5s ease-in-out infinite; }
+.loader-brand span:nth-child(1) { transform: rotate(-2.4deg) translateY(2px); }
+.loader-brand span:nth-child(2) { transform: rotate(1.6deg) translateY(-2px); animation-delay: .4s; }
+.loader-brand span:nth-child(3) { transform: rotate(-1.2deg) translateY(1px); animation-delay: .8s; }
+.loader-brand span:nth-child(4) { transform: rotate(2.2deg) translateY(-1px); animation-delay: 1.2s; }
+@keyframes ink-breathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+.loader-side { margin-top: 10px; writing-mode: vertical-rl; font-size: 13px; letter-spacing: .52em; color: #8a7a63; border-left: 1px solid rgba(138,122,99,.5); padding-left: 10px; }
+.loader-seal-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; }
+.loader-rule { width: 120px; height: 1px; background: linear-gradient(90deg, transparent, #a08c6a 30%, #a08c6a 70%, transparent); }
+.loader-seal { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 7px; background: linear-gradient(145deg, #c04532, #96291d); color: #f6efdc; font-family: "Ma Shan Zheng", "Noto Serif SC", serif; font-size: 16px; box-shadow: 0 6px 14px rgba(150,41,29,.35), inset 0 0 0 2px rgba(246,239,220,.85), inset 0 0 0 4px rgba(150,41,29,.9); transform: rotate(-4deg); }
+.loader-sub, .loader-status { margin-top: 12px; font-size: 10px; font-weight: 800; letter-spacing: .34em; text-indent: .34em; color: #776653; }
+/* 书法进度笔: 与 index.html 首屏内联样式同构(画布 480x36 / 显示 240x18)。 */
+#loader-brush { display: block; margin: 18px auto 0; width: 240px; height: 18px; filter: drop-shadow(0 2px 3px rgba(60,45,25,.18)); }
+
+/* 左上题字区 */
+.intro { position: absolute; top: 48px; left: 5.5vw; max-width: 380px; z-index: 3; transition: opacity .6s ease, filter .6s ease; }
+body.in-cue .intro { opacity: .32; filter: saturate(.7); }
+.eyebrow, .english, .location, .status, footer, .pavilion-nav button, .controls button, .poetry-panel, .content-tabs, .panel-kicker, .poem-label, .poem-byline, .source-line, .scene-cue-buttons, .scene-reading-kicker, .scene-reading-shot { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: #8a7a63; font-size: 10px; font-weight: 800; letter-spacing: .26em; }
+.eyebrow-line { display: inline-block; width: 34px; height: 1px; background: var(--accent); opacity: .8; }
+.intro-title-row { display: flex; align-items: flex-start; gap: 16px; }
+h1 { margin: 0; font-family: "Ma Shan Zheng", "Noto Serif SC", serif; font-weight: 400; font-size: 88px; line-height: .95; letter-spacing: .08em; color: #221a12; text-shadow: 0 1px 0 rgba(255,255,255,.6), 0 12px 32px rgba(60,45,25,.14); }
+.seal { flex: 0 0 auto; margin-top: 10px; width: 46px; height: 46px; display: grid; place-items: center; font-family: "Ma Shan Zheng", serif; font-size: 19px; line-height: 1.05; color: #f6efdc; background: linear-gradient(145deg, #c04532, #96291d); border-radius: 7px; box-shadow: 0 6px 16px rgba(150,41,29,.35), inset 0 0 0 2px rgba(246,239,220,.85), inset 0 0 0 4px rgba(150,41,29,.9); transform: rotate(-3deg); }
+.english { margin: 12px 0 0; font-size: 11px; font-weight: 800; letter-spacing: .3em; color: #5d5347; }
+.location { margin: 10px 0 0; display: inline-block; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, rgba(255,255,255,.6)); color: var(--accent-deep); font-size: 11px; font-weight: 700; letter-spacing: .1em; }
+.description { margin: 12px 0 0; max-width: 330px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.9; text-wrap: pretty; }
+.intro-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; font-size: 9px; font-weight: 800; letter-spacing: .14em; color: #756b60; }
+.intro-meta span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(250,247,236,.66); backdrop-filter: blur(8px); box-shadow: var(--shadow-soft); }
+.intro-meta-live { color: #4f604d !important; border-color: rgba(110,154,104,.4) !important; }
+.intro-meta-live i { width: 6px; height: 6px; border-radius: 50%; background: #6e9a68; box-shadow: 0 0 0 3px rgba(110,154,104,.16); animation: pulse 2.4s ease infinite; }
+@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(.7); opacity: .6; } }
+
+/* 诗境卡: 宣纸卷轴气, 书法大字 + 运镜小注 + 观察正文。 */
+.scene-reading { position: absolute; left: 5.5vw; bottom: 168px; width: min(430px, 38vw); padding: 18px 22px 18px 20px; border: 1px solid rgba(90,76,54,.22); border-left: 3px solid var(--accent); border-radius: 4px 16px 16px 4px; background: linear-gradient(100deg, rgba(251,248,238,.92), rgba(251,248,238,.68) 70%, rgba(251,248,238,.42)); box-shadow: var(--shadow); backdrop-filter: blur(10px); pointer-events: auto; z-index: 4; opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s cubic-bezier(.22,.8,.24,1); }
 .scene-reading.is-visible { opacity: 1; transform: translateY(0); }
-.scene-reading-close { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 0; background: transparent; color: #9a8c7b; cursor: pointer; font-family: Inter, sans-serif; font-size: 17px; line-height: 1; }
-.scene-reading-close:hover { color: var(--ink); }
-.scene-cue-buttons { position: absolute; left: 6vw; bottom: 112px; pointer-events: auto; z-index: 5; }
-.scene-reading-kicker { margin: 0 0 7px; color: var(--accent); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
-.scene-reading-anchor { margin: 0 0 5px; color: #776653; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
-.scene-reading h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.25; }
-.scene-reading-line { margin: 6px 0 0; color: #3b2e25; font-size: 17px; line-height: 1.65; }
-.scene-reading-observation { margin: 7px 0 0; max-width: 350px; color: #665b50; font-size: 12px; line-height: 1.7; }
-.scene-cue-buttons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 15px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; text-shadow: none; }
-.scene-cue-buttons button { border: 1px solid rgba(65,53,42,.2); padding: 6px 9px; background: rgba(247,246,239,.52); color: #756858; cursor: pointer; font-size: 10px; transition: .2s ease; }
-.scene-cue-buttons button:hover, .scene-cue-buttons button.is-active { border-color: var(--accent); background: rgba(255,254,248,.86); color: #34271d; }
-.scene-reading-card { margin: -2px 0 20px; padding: 12px 13px 14px; background: rgba(227, 223, 207, .44); border: 1px solid rgba(61,53,44,.12); }
-.scene-reading-card blockquote { margin: 0; padding-left: 11px; border-left: 2px solid var(--accent); color: #3e342b; font-size: 16px; line-height: 1.8; }
-.scene-reading-panel-note { margin: 8px 0 0; color: #62584e; font-size: 12px; line-height: 1.75; }
-.scene-provenance { margin: 12px 0 18px; color: #897b6c; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; line-height: 1.6; letter-spacing: .02em; }
-.pavilion-nav { position: absolute; top: 54px; right: var(--hud-gutter); width: 184px; display: grid; gap: 5px; pointer-events: auto; transition: right .28s ease; }
-.pavilion-nav button { display: flex; gap: 12px; align-items: center; border: 0; border-left: 2px solid rgba(55,45,36,.17); padding: 10px 11px; background: rgba(242,243,237,.38); color: #62584d; text-align: left; cursor: pointer; font-size: 12px; transition: .2s ease; }
-.pavilion-nav button b { color: #998a78; font-size: 9px; letter-spacing: .12em; }
-.pavilion-nav button:hover, .pavilion-nav button.is-active { border-left-color: var(--accent); background: rgba(255,255,251,.82); color: var(--ink); transform: translateX(-3px); }
-.pavilion-nav button.is-active b { color: var(--accent); }
-.controls { position: absolute; left: 6vw; bottom: 56px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: auto; max-width: 520px; }
-.controls button { border: 1px solid rgba(65,53,42,.25); background: rgba(247,246,239,.76); color: #3d332a; padding: 10px 13px; cursor: pointer; font-size: 11px; letter-spacing: .04em; transition: .2s ease; }
-.controls button:first-child { border-color: var(--accent); color: #342216; }
-.controls button:hover { background: #fffef8; transform: translateY(-2px); }
-.controls button[aria-pressed="true"] { border-color: var(--accent); background: rgba(255,250,235,.9); color: #342216; }
-.model-meta { position: absolute; right: var(--hud-gutter); bottom: 84px; display: grid; gap: 6px; pointer-events: none; padding: 10px 12px; background: rgba(242,243,237,.58); border: 1px solid var(--line); transition: right .28s ease; }
-.meta-row { display: flex; gap: 10px; align-items: baseline; }
-.meta-key { font-size: 9px; font-weight: 800; letter-spacing: .16em; color: #776653; min-width: 50px; }
-.meta-value { font-size: 11px; font-weight: 700; color: #3d332a; }
-.status { position: absolute; right: var(--hud-gutter); bottom: 56px; margin: 0; color: #776653; font-size: 9px; font-weight: 800; letter-spacing: .15em; transition: right .28s ease; }
-footer { position: absolute; right: var(--hud-gutter); bottom: 26px; color: #877967; font-size: 10px; letter-spacing: .05em; display: flex; gap: 14px; transition: right .28s ease; }
-.poetry-panel { position: absolute; top: 24px; right: 24px; bottom: 24px; width: 370px; display: flex; flex-direction: column; pointer-events: auto; background: var(--paper); border: 1px solid rgba(61,53,44,.2); box-shadow: 0 18px 50px rgba(53,48,42,.16); backdrop-filter: blur(10px); transition: transform .28s ease, opacity .28s ease; z-index: 10; }
+body.in-cue .scene-reading { border-left-width: 4px; box-shadow: 0 22px 60px rgba(46,38,28,.22); }
+.scene-reading::after { content: ""; position: absolute; inset: 5px; border: 1px solid rgba(90,76,54,.12); border-radius: 2px 12px 12px 2px; pointer-events: none; }
+.scene-reading-close { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 1px solid transparent; border-radius: 50%; background: transparent; color: #9a8c7b; cursor: pointer; font-family: Inter, sans-serif; font-size: 17px; line-height: 1; z-index: 2; transition: .2s; }
+.scene-reading-close:hover { color: var(--ink); border-color: var(--line); background: rgba(255,255,255,.7); }
+.scene-reading-kicker { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--accent-deep); font-size: 9px; font-weight: 800; letter-spacing: .22em; }
+.kicker-seal { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: var(--cinnabar); color: #f6efdc; font-family: "Ma Shan Zheng", serif; font-size: 13px; letter-spacing: 0; }
+.scene-reading h2 { margin: 0; font-family: "Ma Shan Zheng", serif; font-weight: 400; font-size: 34px; line-height: 1.1; letter-spacing: .06em; }
+.scene-reading-line { margin: 8px 0 0; font-family: "Ma Shan Zheng", serif; font-size: 21px; line-height: 1.5; color: #31241a; }
+.scene-reading-shot { margin: 8px 0 0; font-size: 10px; font-weight: 700; letter-spacing: .12em; color: var(--accent-deep); }
+.scene-reading-observation { margin: 8px 0 0; max-width: 360px; color: #5d5347; font-size: 12.5px; line-height: 1.85; }
+
+/* 一键入诗: 三张诗签横列, 壹贰叁 + 题名 + 原句。 */
+.scene-cue-buttons { position: absolute; left: 5.5vw; bottom: 104px; z-index: 5; display: flex; gap: 8px; pointer-events: auto; }
+.scene-cue-buttons button { min-width: 128px; max-width: 190px; text-align: left; border: 1px solid rgba(90,76,54,.24); border-radius: 12px; padding: 9px 12px 10px; background: rgba(250,247,236,.72); backdrop-filter: blur(10px); box-shadow: var(--shadow-soft); color: #5d5347; cursor: pointer; transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease; }
+.scene-cue-buttons button i { display: block; font-style: normal; font-family: "Noto Serif SC", serif; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: #33291f; }
+.scene-cue-buttons button span { display: block; margin-top: 3px; font-size: 10px; line-height: 1.5; color: #8a7c68; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scene-cue-buttons button:hover { transform: translateY(-3px); border-color: var(--accent); background: rgba(255,253,245,.94); box-shadow: var(--shadow); }
+.scene-cue-buttons button.is-active { border-color: var(--accent); background: linear-gradient(180deg, rgba(255,252,240,.96), rgba(250,240,220,.9)); color: #2e2117; box-shadow: 0 12px 30px rgba(170,112,49,.22); transform: translateY(-2px); }
+.scene-cue-buttons button.is-active i { color: var(--accent-deep); }
+
+/* 右侧楼阁导航: 省章 + 题名 + 诗味副题。 */
+.pavilion-nav { position: absolute; top: 48px; right: var(--hud-gutter); width: 212px; display: grid; gap: 8px; pointer-events: auto; z-index: 3; padding: 10px; border: 1px solid rgba(90,76,54,.2); border-radius: 18px; background: rgba(250,247,236,.6); box-shadow: var(--shadow-soft); backdrop-filter: blur(12px); transition: right .28s ease; }
+.pavilion-nav button { display: flex; gap: 12px; align-items: center; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; background: transparent; color: #62584d; text-align: left; cursor: pointer; transition: .22s ease; }
+.nav-index { display: grid; place-items: center; gap: 1px; width: 40px; height: 44px; border-radius: 10px; background: rgba(90,76,54,.08); border: 1px solid rgba(90,76,54,.14); }
+.nav-index b { color: #998a78; font-size: 10px; letter-spacing: .1em; }
+.nav-index i { font-style: normal; font-family: "Ma Shan Zheng", serif; font-size: 15px; color: #6d6152; }
+.nav-text { display: grid; gap: 2px; }
+.nav-label { font-family: "Noto Serif SC", serif; font-size: 15px; font-weight: 700; letter-spacing: .1em; }
+.nav-sub { font-size: 10px; letter-spacing: .06em; color: #9a8c76; }
+.pavilion-nav button:hover { background: rgba(255,253,245,.8); transform: translateX(-3px); }
+.pavilion-nav button.is-active { background: linear-gradient(180deg, rgba(255,253,245,.96), rgba(250,240,220,.85)); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 10px 26px rgba(170,112,49,.18); transform: translateX(-4px); }
+.pavilion-nav button.is-active .nav-label { color: var(--ink); }
+.pavilion-nav button.is-active .nav-index { background: var(--accent); border-color: var(--accent); }
+.pavilion-nav button.is-active .nav-index b, .pavilion-nav button.is-active .nav-index i { color: #fff8ea; }
+
+/* 底部控制台 */
+.controls { position: absolute; left: 5.5vw; bottom: 44px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; pointer-events: auto; z-index: 5; max-width: 560px; padding: 8px; border: 1px solid rgba(90,76,54,.2); border-radius: 16px; background: rgba(250,247,236,.66); box-shadow: var(--shadow-soft); backdrop-filter: blur(12px); }
+.controls button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(90,76,54,.26); border-radius: 999px; background: rgba(255,253,245,.7); color: #3d332a; padding: 9px 14px; cursor: pointer; font-size: 12px; letter-spacing: .04em; transition: .2s ease; }
+.controls button kbd { font-family: Inter, sans-serif; font-size: 9px; font-weight: 800; border: 1px solid rgba(90,76,54,.3); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; color: #8a7c68; background: rgba(255,255,255,.7); }
+.controls button.control-primary { border-color: var(--accent); background: linear-gradient(180deg, #fff8e8, #f7e3c2); color: #3a2412; box-shadow: 0 6px 16px rgba(170,112,49,.2); }
+.controls button:hover { transform: translateY(-2px); background: #fffdf4; box-shadow: var(--shadow-soft); }
+.controls button[aria-pressed="true"] { border-color: var(--accent); background: linear-gradient(180deg, #fff3da, #f3d9a8); color: #3a2412; }
+.controls button.control-ghost { opacity: .75; }
+
+.status { position: absolute; right: var(--hud-gutter); bottom: 76px; margin: 0; z-index: 3; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(250,247,236,.7); backdrop-filter: blur(8px); color: #6d6152; font-size: 10px; font-weight: 700; letter-spacing: .12em; transition: right .28s ease; }
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+footer { position: absolute; right: var(--hud-gutter); bottom: 44px; z-index: 3; display: flex; gap: 12px; align-items: center; color: #8a7c68; font-size: 10px; letter-spacing: .06em; transition: right .28s ease; }
+footer b { color: #5d5347; font-weight: 800; }
+.footer-hint { padding-right: 12px; border-right: 1px solid var(--line); }
+
+/* 诗文抽屉 */
+.poetry-panel { position: absolute; top: 24px; right: 24px; bottom: 24px; width: 376px; display: flex; flex-direction: column; pointer-events: auto; background: linear-gradient(180deg, rgba(252,249,240,.96), rgba(247,242,228,.92)); border: 1px solid rgba(90,76,54,.26); border-radius: 20px; box-shadow: 0 26px 70px rgba(46,38,28,.24); backdrop-filter: blur(14px); transition: transform .32s cubic-bezier(.22,.8,.24,1), opacity .32s ease; z-index: 10; overflow: hidden; }
 .poetry-panel:not(.is-open) { transform: translateX(calc(100% + 28px)); opacity: 0; pointer-events: none; }
-.poetry-panel-head { display: flex; justify-content: space-between; gap: 16px; padding: 22px 22px 16px; border-bottom: 1px solid var(--line); }
-.panel-kicker { margin: 0 0 7px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
-.poetry-panel h2 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.3; }
-.icon-button { width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font-family: Inter, sans-serif; font-size: 20px; line-height: 1; }
-.icon-button:hover { color: var(--ink); border-color: var(--accent); }
+.poetry-panel-head { display: flex; justify-content: space-between; gap: 16px; padding: 24px 22px 16px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, rgba(176,137,78,.1), transparent); }
+.panel-kicker { margin: 0 0 8px; color: var(--accent-deep); font-size: 10px; font-weight: 800; letter-spacing: .22em; }
+.poetry-panel h2 { margin: 0; font-family: "Ma Shan Zheng", serif; font-weight: 400; font-size: 28px; letter-spacing: .06em; }
+.icon-button { width: 32px; height: 32px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 50%; background: rgba(255,255,255,.6); color: var(--muted); cursor: pointer; font-family: Inter, sans-serif; font-size: 18px; line-height: 1; transition: .2s; }
+.icon-button:hover { color: var(--ink); border-color: var(--accent); transform: translateY(-1px); }
 .panel-actions { display: flex; gap: 8px; align-items: flex-start; }
-.icon-text { font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 14px; font-weight: 600; }
-.icon-text[aria-pressed="true"] { border-color: var(--accent); color: #342216; background: rgba(255,250,235,.9); }
-.content-tabs { display: flex; gap: 4px; padding: 12px 22px 10px; border-bottom: 1px solid var(--line); }
-.content-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 6px 2px; margin-right: 14px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
-.content-tabs button.is-active { border-bottom-color: var(--accent); color: var(--ink); font-weight: 800; }
-.poetry-panel-body { overflow: auto; padding: 18px 22px 26px; }
-.poem-entry + .poem-entry { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
-.poem-label { margin-bottom: 8px; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
-.poem-entry h3, .content-section h3, .part-group h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.poem-byline { margin: 6px 0 14px; color: var(--muted); font-size: 10px; letter-spacing: .05em; }
-.poem-entry blockquote { margin: 0 0 14px; padding-left: 13px; border-left: 2px solid var(--accent); color: #3e342b; font-size: 15px; line-height: 2; }
-/* 竖排阅读: 经典右起竖列, 只作用于诗文引文块。滚动容器 (blockquote) 保持
-   横排, 内层 .quote-body 立文字并按内容取宽 — 右起第一列落在盒的右缘,
-   左向的列溢出因此变成可向右滚动的真实宽度, scrollLeft 能送到文本开头。 */
-.poetry-panel-body.is-vertical .poem-entry blockquote { overflow-x: auto; overflow-y: hidden; border-left: 0; border-top: 2px solid var(--accent); padding: 10px 0 2px; }
+.icon-text { font-family: "Noto Serif SC", serif; font-size: 14px; font-weight: 700; }
+.icon-text[aria-pressed="true"] { border-color: var(--accent); color: #342216; background: rgba(255,240,214,.9); }
+.content-tabs { display: flex; gap: 6px; padding: 12px 18px 10px; border-bottom: 1px solid var(--line); background: rgba(176,137,78,.07); }
+.content-tabs button { border: 1px solid transparent; border-radius: 999px; padding: 7px 13px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; transition: .2s; }
+.content-tabs button:hover { background: rgba(255,255,255,.7); }
+.content-tabs button.is-active { background: #fffdf4; border-color: color-mix(in srgb, var(--accent) 50%, transparent); color: var(--ink); font-weight: 800; box-shadow: var(--shadow-soft); }
+.poetry-panel-body { overflow: auto; padding: 20px 22px 28px; scrollbar-width: thin; }
+.poem-entry + .poem-entry { margin-top: 26px; padding-top: 24px; border-top: 1px dashed rgba(90,76,54,.3); }
+.poem-label { margin: 0 0 8px; color: var(--accent-deep); font-size: 9px; font-weight: 800; letter-spacing: .2em; }
+.poem-entry h3, .content-section h3, .part-group h3 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .04em; }
+.poem-byline { margin: 6px 0 14px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.poem-entry blockquote { margin: 0 0 14px; padding: 14px 15px 14px 16px; border: 1px solid rgba(90,76,54,.18); border-left: 3px solid var(--accent); border-radius: 4px 12px 12px 4px; background: rgba(255,253,245,.7); color: #33291f; font-size: 15.5px; line-height: 2.05; box-shadow: inset 0 0 24px rgba(176,137,78,.06); }
+/* 竖排阅读: 经典右起竖列, 只作用于诗文引文块。 */
+.poetry-panel-body.is-vertical .poem-entry blockquote { overflow-x: auto; overflow-y: hidden; border-left: 1px solid rgba(90,76,54,.18); border-top: 3px solid var(--accent); padding: 12px 4px; }
 .poetry-panel-body.is-vertical .poem-entry blockquote .quote-body { display: block; writing-mode: vertical-rl; text-orientation: mixed; height: 40vh; width: max-content; line-height: 2.1; letter-spacing: .06em; }
-.poem-gloss, .content-section p, .part-group p { margin: 10px 0 0; color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 13px; line-height: 1.85; }
-details { margin-top: 14px; border-top: 1px solid rgba(61,53,44,.12); }
+.poem-gloss, .content-section p, .part-group p { margin: 10px 0 0; color: #5d5347; font-family: "Noto Serif SC", serif; font-size: 13px; line-height: 1.9; }
+details { margin-top: 14px; border: 1px solid rgba(90,76,54,.16); border-radius: 12px; padding: 0 14px 12px; background: rgba(255,253,245,.55); }
 summary { padding-top: 11px; cursor: pointer; color: #4b4036; font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; }
-details p { color: #62584e; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 12px; line-height: 1.8; }
-.source-line { color: #8b7b6a !important; font-size: 10px !important; }
-.content-section > h3 { margin-top: 22px; }
-.content-lead { color: #3f332a !important; font-size: 15px !important; }
-.source-list { margin: 10px 0 0; padding-left: 18px; color: #766a5d; font-family: Inter, sans-serif; font-size: 11px; line-height: 1.8; }
+details p { color: #5d5347; font-family: "Noto Serif SC", serif; font-size: 12.5px; line-height: 1.9; }
+.source-line { color: #9a8c76 !important; font-size: 10px !important; }
+.content-section > h3 { margin-top: 24px; }
+.content-lead { color: #3f332a !important; font-size: 15px !important; line-height: 2 !important; }
+.source-list { margin: 10px 0 0; padding-left: 18px; color: #766a5d; font-family: Inter, sans-serif; font-size: 11px; line-height: 1.9; }
 .part-group { padding: 12px 0; border-bottom: 1px solid rgba(61,53,44,.1); }
 .part-group h3 { font-family: Inter, sans-serif; font-size: 12px; }
 .empty-content { color: var(--muted); font-size: 13px; line-height: 1.8; }
+
+@media (max-width: 1100px) {
+  h1 { font-size: 64px; }
+  .intro { max-width: 310px; }
+  .scene-reading { width: min(360px, 36vw); }
+  .pavilion-nav { width: 196px; }
+}
 @media (max-width: 980px) {
   .poetry-panel { width: 340px; }
   body.poetry-open { --hud-gutter: 366px; }
 }
-/* 横屏平板：收紧左列字号与卡宽，右列导航收窄，避免 1024 级视口左右列互挤。 */
-@media (max-width: 1100px) {
-  h1 { font-size: 60px; }
-  .intro { max-width: 300px; }
-  .scene-reading { width: min(350px, 36vw); }
-  .scene-reading-observation { max-width: 300px; }
-  .pavilion-nav { width: 168px; }
-  .model-meta { display: none; }
-}
 @media (max-width: 700px) {
-  .intro { top: 24px; left: 20px; max-width: 250px; }
-  h1 { font-size: 52px; }
-  .description { max-width: 230px; font-size: 11px; }
-  .scene-reading { left: 18px; right: 18px; bottom: 118px; width: auto; max-width: none; padding: 10px 12px 11px; background: linear-gradient(90deg, rgba(247,246,239,.8), rgba(247,246,239,.32)); }
-  .scene-reading h2 { font-size: 22px; }
-  .scene-reading-line { font-size: 15px; }
-  .scene-reading-observation { max-width: 280px; font-size: 11px; }
-  .scene-reading-anchor { font-size: 8px; }
-  .scene-cue-buttons { position: absolute; left: 18px; bottom: 84px; max-width: 330px; margin-top: 0; }
-  .scene-cue-buttons button { padding: 5px 7px; font-size: 9px; }
-  .pavilion-nav { top: 166px; right: 16px; bottom: auto; width: 142px; gap: 3px; z-index: 12; }
-  .pavilion-nav button { padding: 7px 8px; font-size: 10px; background: rgba(243,244,238,.62); }
-  .controls { left: 18px; right: 18px; bottom: 18px; max-width: none; gap: 5px; }
-  .controls button { padding: 8px 9px; font-size: 10px; }
-  .model-meta, .status, footer { display: none; }
-  .poetry-panel { top: auto; right: 0; bottom: 0; width: 100%; max-height: 72vh; border-right: 0; border-bottom: 0; transform: translateY(0); }
+  .scrim-top { height: 30vh; }
+  .intro { top: 20px; left: 18px; max-width: 250px; }
+  h1 { font-size: 54px; }
+  .seal { width: 38px; height: 38px; font-size: 16px; }
+  .description { font-size: 11.5px; }
+  .intro-meta { display: none; }
+  .scene-reading { left: 14px; right: 14px; bottom: 158px; width: auto; max-width: none; padding: 14px 15px; }
+  .scene-reading h2 { font-size: 26px; }
+  .scene-reading-line { font-size: 18px; }
+  .scene-cue-buttons { left: 14px; right: 14px; bottom: 76px; display: grid; grid-template-columns: 1fr 1fr 1fr; max-width: none; }
+  .scene-cue-buttons button { min-width: 0; padding: 8px 9px; }
+  .scene-cue-buttons button span { display: none; }
+  .pavilion-nav { top: 150px; right: 12px; width: 148px; padding: 6px; }
+  .pavilion-nav button { padding: 7px 8px; }
+  .nav-sub { display: none; }
+  .controls { left: 14px; right: 14px; bottom: 14px; max-width: none; gap: 5px; }
+  .controls button { padding: 8px 10px; font-size: 11px; }
+  .controls button kbd { display: none; }
+  .status, footer { display: none; }
+  .poetry-panel { top: auto; right: 0; bottom: 0; width: 100%; max-height: 72vh; border-radius: 20px 20px 0 0; transform: translateY(0); }
   .poetry-panel:not(.is-open) { transform: translateY(calc(100% + 18px)); }
-  .poetry-panel-head { padding: 16px 18px 12px; }
-  .poetry-panel h2 { font-size: 18px; }
-  .content-tabs { padding-left: 18px; }
-  .poetry-panel-body { padding: 15px 18px 24px; }
 }
 
-/* ThreeUI-inspired native HUD: compact pills, soft glass surfaces, and a
-   deliberate reading hierarchy without introducing a second UI framework. */
-.intro-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .12em; color: #756b60; }
-.intro-meta span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid rgba(65,53,42,.16); border-radius: 999px; background: rgba(247,246,239,.44); backdrop-filter: blur(8px); }
-.intro-meta-live { color: #4f604d !important; }
-.intro-meta-live i { width: 6px; height: 6px; border-radius: 50%; background: #6e9a68; box-shadow: 0 0 0 3px rgba(110,154,104,.14); }
-.scene-reading { border-radius: 0 18px 18px 0; box-shadow: 0 14px 32px rgba(53,48,42,.08); }
-.scene-cue-buttons button, .content-tabs button { border-radius: 999px; }
-.pavilion-nav { padding: 7px; border: 1px solid rgba(65,53,42,.13); border-radius: 18px; background: rgba(242,243,237,.34); box-shadow: 0 12px 32px rgba(53,48,42,.08); backdrop-filter: blur(10px); }
-.pavilion-nav button { border-radius: 11px; }
-.controls { align-items: center; padding: 7px; border: 1px solid rgba(65,53,42,.13); border-radius: 18px; background: rgba(242,243,237,.4); box-shadow: 0 12px 32px rgba(53,48,42,.08); backdrop-filter: blur(10px); }
-.controls button { border-radius: 999px; }
-.controls button.control-primary { border-color: var(--accent); background: rgba(255,250,235,.9); color: #342216; box-shadow: 0 5px 14px rgba(170,112,49,.13); }
-.poetry-panel { border-radius: 24px; overflow: hidden; box-shadow: 0 22px 64px rgba(53,48,42,.2); }
-.poetry-panel-head { padding-top: 24px; }
-.content-tabs { background: rgba(238,237,228,.42); }
-.content-tabs button { padding: 7px 11px; margin-right: 0; }
-.content-tabs button.is-active { background: rgba(255,254,248,.86); }
-.model-meta { border-radius: 15px; backdrop-filter: blur(8px); }
-@media (max-width: 700px) {
-  .intro-meta { margin-top: 12px; font-size: 8px; }
-  .intro-meta span { padding: 5px 7px; }
-  .pavilion-nav { padding: 5px; border-radius: 15px; }
-  .controls { padding: 5px; border-radius: 15px; }
-  .controls button { padding: 8px 10px; }
-  .scene-reading { border-radius: 0 15px 15px 0; }
+/* 细节收口: 卷轴滚动条、首节留白、正文换行、动效克制。 */
+.poetry-panel-body { scrollbar-width: thin; scrollbar-color: rgba(138,122,99,.55) transparent; }
+.poetry-panel-body::-webkit-scrollbar { width: 8px; }
+.poetry-panel-body::-webkit-scrollbar-thumb { border-radius: 8px; background: rgba(138,122,99,.4); border: 2px solid transparent; background-clip: content-box; }
+.poetry-panel-body::-webkit-scrollbar-track { background: transparent; }
+.content-section > h3:first-child { margin-top: 0; }
+.scene-reading-observation { text-wrap: pretty; }
+.poem-entry blockquote { text-wrap: pretty; }
+@media (prefers-reduced-motion: reduce) {
+  .shell, .loader-inner, .loader-brand span, .intro-meta-live i { animation: none; }
+  .letterbox, .scene-reading, .poetry-panel, .pavilion-nav, .controls button, .scene-cue-buttons button { transition-duration: .01ms; }
 }

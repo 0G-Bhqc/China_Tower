@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { PAVILION_SPECS } from './createPavilionGalleryModel';
 import { detectDeviceQualityProfile, selectAvailableLod, type RuntimeLod } from './runtime/DeviceQualityProfile';
 import { assetUrl, isAbortError, loadVerifiedGlb, type PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { registerPavilionAssembly } from './runtime/PavilionAssemblyRuntime';
 import { computeStructuralBaseY } from './runtime/grounding';
 import { createPlaqueMesh, type PlaqueSpec } from './runtime/createPlaqueMesh';
 import { needsSemanticRecolor, recolorMeshSurfaces, type SemanticPalette, isNearWhitePlaceholder } from './runtime/semanticSurfaceRecolor';
-import { applySemanticRelief } from './runtime/semanticRelief';
+import { applySemanticRelief, applyTengwangTierDetail } from './runtime/semanticRelief';
+import { flipWindingIfMirrored } from './runtime/mergeAssemblyByMaterial';
 import { MeshoptSimplifier } from './vendor/meshopt_simplifier.module';
 
 // ---------------------------------------------------------------------------
@@ -62,8 +62,13 @@ async function admitHighPrecisionBudget(assembly: THREE.Group): Promise<string> 
   assembly.traverse((object) => {
     if ((object as THREE.Mesh).isMesh) meshList.push(object as THREE.Mesh);
   });
+  // 同一几何被多实例共享时只登记一次: 否则实例数会虚增总量,
+  // 且同一几何被反复化简导致过度抽稀。
+  const seenAdmissionGeometries = new Set<THREE.BufferGeometry>();
   for (const mesh of meshList) {
     const geometry = mesh.geometry;
+    if (seenAdmissionGeometries.has(geometry)) continue;
+    seenAdmissionGeometries.add(geometry);
     const index = geometry.getIndex();
     const position = geometry.getAttribute('position');
     if (!index || !position) continue;
@@ -76,7 +81,7 @@ async function admitHighPrecisionBudget(assembly: THREE.Group): Promise<string> 
   const ratio = HP_TRIANGLE_BUDGET / totalTriangles;
   let before = 0;
   let after = 0;
-  for (const { geometry, triangleCount } of records) {
+  for (const [recordIndex, { geometry, triangleCount }] of records.entries()) {
     before += triangleCount;
     const targetTriangles = Math.max(3, Math.floor(triangleCount * ratio));
     const sourceIndices = new Uint32Array(geometry.getIndex()!.array);
@@ -88,6 +93,9 @@ async function admitHighPrecisionBudget(assembly: THREE.Group): Promise<string> 
     } else {
       after += triangleCount;
     }
+    // 后台升级时数千网格连续简化会冻结主线程: 每 8 个让出一帧, 进度条与
+    // 运镜保持活着。hero 首载同理受益, 开销仅数毫秒。
+    if ((recordIndex & 7) === 7) await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return `simplified ${Math.round(before)} → ${Math.round(after)} tris (error ≤ ${(HP_MAX_ERROR * 100).toFixed(1)}% of extent, borders locked)`;
 }
@@ -111,7 +119,6 @@ function mergeAssemblyByMaterial(assembly: THREE.Group): number {
   type Group = { material: THREE.Material; attributesKey: string; geometries: THREE.BufferGeometry[] };
   const groups = new Map<string, Group>();
   const kept: THREE.Mesh[] = [];
-  const seenGeometries = new Set<THREE.BufferGeometry>();
   const bakedGeometries: THREE.BufferGeometry[] = [];
   for (const mesh of meshList) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -129,25 +136,57 @@ function mergeAssemblyByMaterial(assembly: THREE.Group): number {
       group = { material: materials[0], attributesKey, geometries: [] };
       groups.set(key, group);
     }
-    // A geometry reused by several meshes must be cloned per instance before
-    // its assembly-relative transform is baked in.
-    let baked = geometry;
-    if (seenGeometries.has(geometry)) baked = geometry.clone();
-    seenGeometries.add(geometry);
-    baked.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverseAssembly, mesh.matrixWorld));
+    // 永远克隆后再烘焙: gltfpack 产物大量复用同一几何(2529 实例共享 888 定义),
+    // 若首个实例直接原地烘焙, 后续复用者会在已烘焙结果上叠加变换,
+    // 碎片被甩到几公里外(2026-09 实测合并体跨度 1107m)。原几何随后统一释放。
+    // 镜像实例(行列式<0)烘焙后必须翻转绕序, 否则合并网格行列式回正、
+    // three 的镜像剔除补偿消失, 镜像部件整片被剔(门扇镂空)。
+    const baked = geometry.clone();
+    const bakeMatrix = new THREE.Matrix4().multiplyMatrices(inverseAssembly, mesh.matrixWorld);
+    baked.applyMatrix4(bakeMatrix);
+    flipWindingIfMirrored(baked, bakeMatrix);
     bakedGeometries.push(baked);
     group.geometries.push(baked);
   }
 
-  for (const mesh of meshList) mesh.parent?.remove(mesh);
+  for (const mesh of meshList) {
+    mesh.parent?.remove(mesh);
+    // 只有被合并消费掉的原几何才释放; kept 网格保留自身几何(仅脱离父级)。
+    if (!kept.includes(mesh)) mesh.geometry.dispose();
+  }
 
   let mergedIndex = 0;
+  let fallbackMeshes = 0;
+  // 成功合并的 baked 几何(mergeGeometries 拷贝数据, 原 baked 可释放);
+  // 失败回退的 baked 直接上屏, 不可释放——用集合区分。
+  const consumedBaked = new Set<THREE.BufferGeometry>();
   for (const group of groups.values()) {
     if (group.geometries.length === 0) continue;
-    const merged = group.geometries.length === 1
-      ? group.geometries[0]
-      : mergeGeometries(group.geometries, false);
-    if (!merged) continue;
+    let merged: THREE.BufferGeometry | null = null;
+    if (group.geometries.length === 1) {
+      merged = group.geometries[0];
+    } else {
+      try {
+        merged = mergeGeometries(group.geometries, false);
+      } catch {
+        merged = null;
+      }
+    }
+    if (!merged) {
+      // 合并失败(属性/索引类型不一致)必须回退为单网格逐个上屏:
+      // 直接丢弃整组 = 整组部件凭空消失(2026-09 门扇镂空类投诉的头号嫌疑)。
+      // baked 几何已是装配系坐标, 可直接使用。
+      for (const single of group.geometries) {
+        const mesh = new THREE.Mesh(single, group.material);
+        mesh.name = `tengwang-unmerged-${String(mergedIndex).padStart(3, '0')}-${String(fallbackMeshes).padStart(3, '0')}`;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        assembly.add(mesh);
+        fallbackMeshes += 1;
+      }
+      mergedIndex += 1;
+      continue;
+    }
     merged.computeBoundingBox();
     merged.computeBoundingSphere();
     const mesh = new THREE.Mesh(merged, group.material);
@@ -156,9 +195,20 @@ function mergeAssemblyByMaterial(assembly: THREE.Group): number {
     mesh.receiveShadow = true;
     assembly.add(mesh);
     mergedIndex += 1;
+    // 多几何合并产出的是全新缓冲, 原 baked 可释放; 单几何组直接沿用
+    // baked 本体(正显示), 不可释放。
+    if (group.geometries.length > 1) {
+      for (const baked of group.geometries) consumedBaked.add(baked);
+    }
+  }
+  if (fallbackMeshes > 0) {
+    console.warn(`[Tengwang] ${fallbackMeshes} mesh(es) kept unmerged (merge incompatible), draw calls +${fallbackMeshes}.`);
   }
   for (const mesh of kept) assembly.add(mesh);
-  for (const geometry of bakedGeometries) geometry.dispose();
+  for (const geometry of bakedGeometries) {
+    if (!consumedBaked.has(geometry)) continue;
+    geometry.dispose();
+  }
   return mergedIndex + kept.length;
 }
 
@@ -169,8 +219,12 @@ const TENGWANG_LODS: Record<RuntimeLod, string> = {
 };
 
 // High-precision source: 3D资产/滕王阁（1）/3d66.com_22753718.max
-// Convert to GLB and place at: public/assets/tengwang-high-precision/tengwang-22753718.glb
-const TENGWANG_HIGH_PRECISION_GLB = assetUrl('/assets/tengwang-high-precision/tengwang-22753718.glb');
+// Runtime master is the OFFLINE-BAKED web derivative (gltfpack -si 0.36 -cc
+// -kn -vpf -vtf): 406MB/8.4M-tris → ~61MB/~0.78M-tris, meshopt-compressed,
+// float positions/UVs kept (the source units are huge; default quantization
+// smeared textures 39153%). Raw master stays out of public/ as bake source.
+// 运行时准入预算(3.2M)直接放行, 只做材质合并; 化简已在构建期完成。
+const TENGWANG_HIGH_PRECISION_GLB = assetUrl('/assets/tengwang-high-precision/tengwang-master-web.glb');
 
 // Tengwang reads as dark grey-green tile roofs on strong vermilion work.
 const TENGWANG_SEMANTIC_PALETTE: SemanticPalette = {
@@ -194,24 +248,57 @@ const TENGWANG_PLAQUES: PlaqueSpec[] = [
   },
 ];
 
-function attachPlaques(root: THREE.Group, focusBounds: THREE.Box3): void {
+function attachPlaques(root: THREE.Group, assembly: THREE.Group): void {
+  // 牌匾落位改用射线实测: 从默认机位方向(与 frameModel 同方位角)向塔心打
+  // 一束射线, 取首个命中面的位置+法线挂匾——无论资产单位/朝向/合并粒度怎么
+  // 变, 匾永远贴在朝向默认视角的那面墙上, 不再依赖 focus 包络(大师版上
+  // focus 会锁到入口小品, 旧算法把 2 米匾埋进了台基)。
+  // 射线未命中则宁可不挂(不可见的匾比嵌进墙里的匾强)。
+  assembly.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(assembly);
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3());
+  const centre = box.getCenter(new THREE.Vector3());
+  const corridorAzimuth = 1.22; // 与 frameModel 滕王阁默认方位角一致
+  const rayDirection = new THREE.Vector3(
+    Math.sin(corridorAzimuth), 0, Math.cos(corridorAzimuth),
+  );
+  const rayOrigin = centre.clone()
+    .addScaledVector(rayDirection, Math.max(size.x, size.z) * 2)
+    .add(new THREE.Vector3(0, size.y * 0.12, 0));
+  const rayTarget = centre.clone().add(new THREE.Vector3(0, size.y * 0.12, 0));
+  const raycaster = new THREE.Raycaster(
+    rayOrigin,
+    rayTarget.clone().sub(rayOrigin).normalize(),
+    0.1,
+    Math.max(size.x, size.z) * 4,
+  );
+  const pickables: THREE.Object3D[] = [];
+  assembly.traverse((object) => {
+    if (object instanceof THREE.Mesh) pickables.push(object);
+  });
+  // 取首个真正朝向机位走廊的命中面(掠过翼角侧面之类不正对的不算):
+  // rayDirection 即塔心指向机位的方向, 法线与它点积 > 0.34(约 70° 夹角内)才挂匾。
+  let hit: THREE.Intersection | null = null;
+  for (const candidate of raycaster.intersectObjects(pickables, false)) {
+    if (!candidate.face) continue;
+    const facing = candidate.face.normal.clone().transformDirection(candidate.object.matrixWorld);
+    if (facing.dot(rayDirection) < 0.34) continue;
+    hit = candidate;
+    break;
+  }
+  if (!hit || !hit.face) return;
+  const width = THREE.MathUtils.clamp(size.y * 0.1, 2.2, 4.5);
   for (const spec of TENGWANG_PLAQUES) {
-    // Position the plaque from the live focus bounds instead of baked magic
-    // numbers: the high-precision asset's native scale changed several times,
-    // and a fixed y/z only ever matched one of them. The board hugs the tower
-    // body (72% up, between the centre and the podium's front edge) so it
-    // never floats out in front of the wide base slabs.
-    const size = focusBounds.getSize(new THREE.Vector3());
-    const width = THREE.MathUtils.clamp(size.y * 0.1, 2.2, 4.5);
     const plaque = createPlaqueMesh({
       ...spec,
       width,
       height: width * (spec.height / spec.width),
-      // Face the default camera corridor (+x/+z); the baked π-rotation in the
-      // dead-code spec pointed the board away from every current viewpoint.
-      rotation: [0, Math.PI * 0.12, 0],
     });
-    plaque.position.set(0, focusBounds.min.y + size.y * 0.72, focusBounds.min.z + size.z * 0.66);
+    const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    plaque.position.copy(hit.point).addScaledVector(normal, 0.18);
+    // 牌面看法线: PlaneGeometry 默认朝 +z, orient 到命中法线。
+    plaque.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
     plaque.userData.pavilionPlaque = { text: spec.text, bgColor: spec.bgColor, textColor: spec.textColor };
     root.add(plaque);
   }
@@ -270,7 +357,7 @@ function removeOutOfAreaGeometry(assembly: THREE.Object3D): number {
   return removals.length;
 }
 
-function prepareHighModel(assembly: THREE.Group): void {
+function prepareHighModel(assembly: THREE.Group, tierDetail = false): void {
   removeOutOfAreaGeometry(assembly);
   const materials = new Map<string, THREE.Material>();
   let meshIndex = 0;
@@ -384,6 +471,12 @@ function prepareHighModel(assembly: THREE.Group): void {
 
   const reliefMeshes = applySemanticRelief(assembly);
   console.info(`[Tengwang] Semantic relief textures applied to ${reliefMeshes} recolored mesh(es).`);
+  // 语义档首屏精修(大师版不需要, 移动端为显存跳过): 17 块大色块按分区叠
+  // 法线起伏 + 无贴图块烘 AO, albedo 原样保留。见 semanticRelief。
+  if (tierDetail && detectDeviceQualityProfile().id !== 'mobile') {
+    const tierMeshes = applyTengwangTierDetail(assembly);
+    console.info(`[Tengwang] Tier surface detail applied to ${tierMeshes} mesh(es).`);
+  }
 
   // Normalize the imported high-precision model into the shared pavilion
   // gallery scale. The source scene may be authored at unusual world scale,
@@ -555,29 +648,29 @@ export function createTengwangTowerHighModel(loadOptions: PavilionModelLoadOptio
   root.name = 'tengwang-highmodel-root';
   root.userData.sculptRuntime = { nodes: { root }, meshes: {}, sockets: {}, colliders: {}, destructionGroups: { tower: [] } };
 
-  // Asset selection. The 426MB high-precision master loads only on explicit
-  // hero (`?quality=hero`); standard defaults to the 8.9MB lod1 tier with a
-  // lod2 fallback. The master stays one click away for review, but it must
-  // not be the default download — 8M triangles as a first paint crashes
-  // exactly the mid-range machines 自适应 is trying to save. `?lod=` still
-  // forces any tier and every stage falls back to the next on failure.
-  const forcedLod = new URLSearchParams(window.location.search).get('lod');
+  // Asset selection. Desktop (and hero) load the offline-baked web master
+  // first (61MB/0.78M tris — on par with huanghe's 60MB default): one stage,
+  // no crude-to-fine pop. Mobile takes the 8.5MB lod1 tier. `?lod=` still
+  // forces any semantic tier, and every stage falls back down the full chain
+  // on failure (never jumping straight to the coarsest).
+  const forcedLod = new URLSearchParams(window.location.search).get('lod') as RuntimeLod | null;
   const qualityId = detectDeviceQualityProfile().id;
-  const useHighPrecision = qualityId === 'hero' && !forcedLod;
-  const preferredLod = selectAvailableLod(TENGWANG_LODS);
-  root.userData.runtimeLod = useHighPrecision ? 'lod0hp' : preferredLod;
-  const fallbackSpec = PAVILION_SPECS.find((spec) => spec.id === 'tengwang');
+  const useHighPrecision = qualityId !== 'mobile' && !forcedLod;
+  const preferredLod = forcedLod ?? selectAvailableLod(TENGWANG_LODS);
+  root.userData.runtimeLod = useHighPrecision ? 'master' : preferredLod;
+  const semanticFallbacks = (['lod0', 'lod1', 'lod2'] as RuntimeLod[])
+    .filter((lod) => lod !== preferredLod)
+    .map((lod) => ({ url: TENGWANG_LODS[lod], lod, source: `${lod}-fallback`, plaques: lod !== 'lod2' } satisfies TengwangStage));
   const stages: TengwangStage[] = useHighPrecision
     ? [
-        { url: TENGWANG_HIGH_PRECISION_GLB, lod: 'lod0hp', source: 'high-precision', plaques: true },
+        { url: TENGWANG_HIGH_PRECISION_GLB, lod: 'master', source: 'high-precision', plaques: true },
         { url: TENGWANG_LODS.lod0, lod: 'lod0', source: 'semantic-hierarchy', plaques: true },
-        { url: TENGWANG_LODS.lod1, lod: 'lod1', source: 'lod1-fallback', plaques: false },
+        ...semanticFallbacks.filter((stage) => stage.lod !== 'lod0'),
       ]
     : [
         { url: TENGWANG_LODS[preferredLod], lod: preferredLod, source: preferredLod === 'lod0' ? 'semantic-hierarchy' : `${preferredLod}-tier`, plaques: true },
-        ...(preferredLod !== 'lod2'
-          ? [{ url: TENGWANG_LODS.lod2, lod: 'lod2', source: 'lod2-fallback', plaques: false } satisfies TengwangStage]
-          : []),
+        // 完整降级链: lod0→lod1→lod2 逐级下探, 跳过已选档。
+        ...semanticFallbacks,
       ];
   let stageIndex = 0;
 
@@ -588,9 +681,9 @@ export function createTengwangTowerHighModel(loadOptions: PavilionModelLoadOptio
         const assembly = gltf.scene;
         assembly.name = 'tengwang-highmodel-admitted-core';
         root.userData.runtimeLod = stage.lod;
-        prepareHighModel(assembly);
-        // Precision-budgeted decimation + material merge — high-precision
-        // stages only; the small semantic LODs are already lean.
+        // 大师版自带真几何与贴图, 不需要档位表面精修; 语义档需要。
+        prepareHighModel(assembly, stage.source !== 'high-precision');
+        // Web 烘焙版已在预算内(0.78M < 3.2M): 准入直放, 只做材质合并降 draw call。
         if (stage.source === 'high-precision') {
           const budget = await admitHighPrecisionBudget(assembly);
           const drawMeshes = mergeAssemblyByMaterial(assembly);
@@ -599,7 +692,7 @@ export function createTengwangTowerHighModel(loadOptions: PavilionModelLoadOptio
         registerPavilionAssembly(root, assembly, 'tengwang');
         if (assembly.userData.focusBounds instanceof THREE.Box3) {
           root.userData.focusBounds = assembly.userData.focusBounds;
-          if (stage.plaques) attachPlaques(root, assembly.userData.focusBounds);
+          if (stage.plaques) attachPlaques(root, assembly);
         }
         root.add(assembly);
         root.userData.highModelReady = true;

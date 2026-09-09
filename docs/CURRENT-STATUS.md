@@ -1,9 +1,9 @@
 # China Tower project continuation status
 
-Updated: 2026-09-04 七项优化收口 (Asia/Shanghai)
+Updated: 2026-09-05 滕王阁大师版 Web 烘焙 + 首段直载 (Asia/Shanghai)
 Workspace: `E:/Station/China_Tower`
 Branch: `master` (local only, no remote)
-HEAD: `4c5b8ee` + FINAL docs（见 `docs/CONTINUATION-2026-09-04.md`），工作区干净，`dist/` 为根基座正式包（31 文件 / 14 GLB / 0.70GB）
+HEAD: `4c5b8ee` + FINAL docs（见 `docs/CONTINUATION-2026-09-04.md`），工作区有未提交改动（滕王阁烘焙版+机位/UI 多轮），`dist/` 已重打（含 61MB 烘焙大师版，原 406MB 已移出 public，包体积显著下降）
 
 ## What this project is now
 
@@ -38,6 +38,22 @@ Three probe scripts live in `scripts/`, all writing `results.json` under `eviden
 | subpath deploy (`DEPLOY_BASE=/towers/`) | PASS — /towers 下启动、GLB 200、零报错 | 2026-09-04 |
 
 A failed check needs a re-run after the fix, not an argument.
+
+## The 09-05 tengwang master round (this session, unverified visually)
+
+Tengwang 406MB master → gltfpack offline bake (`-si 0.36 -cc -kn -vpf -vtf`,
+float kept: source units defeat default quantization) → 61MB/0.78M-tri web
+master with meshopt+quantization; raw master archived to
+`3D资产/tengwang-master-source/` (out of `public/`). Desktop loads the baked
+master FIRST (no crude-to-fine pop); the two-phase upgrade/prefetch/session
+machinery is removed. Bake exposed a real landmine and fixed it: the local
+`mergeAssemblyByMaterial` copy baked transforms into shared geometries
+in-place (gltfpack dedups: 2529 instances share 888 definitions), scattering
+fragments across 1107m — now always clones (the shared runtime module already
+did). Measured post-fix: 32.2×14×18.5m centered, 46 draws, ~3.3M composited
+tris, ready 37s in sandbox. Manifest + validator + README + pipeline paths
+updated to the web master; `validate-runtime-asset-manifest --verify-hashes`
+passes (319.83 MiB / 8,111,968 tris).
 
 ## The 09-04 seven-item round (see `docs/CONTINUATION-2026-09-04.md`)
 

@@ -140,7 +140,16 @@ export function createPoetryPanel(): PoetryPanel {
     verticalButton?.setAttribute('aria-pressed', String(on));
     snapVerticalScroll();
   }
-  applyVertical(localStorage.getItem(VERTICAL_KEY) === '1');
+  // 竖排偏好存 localStorage, 跨会话记住。读取同样加固: 无痕/禁用 Cookie 时
+  // getItem 本身会抛 SecurityError, 不能让它掀翻整个顶层初始化(卡 loader)。
+  function readVerticalPreference(): boolean {
+    try {
+      return localStorage.getItem(VERTICAL_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+  applyVertical(readVerticalPreference());
   verticalButton?.addEventListener('click', () => {
     const on = !body.classList.contains('is-vertical');
     applyVertical(on);

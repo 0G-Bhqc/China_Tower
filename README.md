@@ -51,7 +51,7 @@ pnpm preview
 │
 ├── public/                 # 静态资源
 │   └── assets/             # 3D 模型 & 纹理
-│       ├── tengwang-high-precision/  # 滕王阁 426MB 高精度 GLB
+  │       ├── tengwang-high-precision/  # 滕王阁大师版 Web 烘焙版(61MB/78万面, 由 3D资产/tengwang-master-source/406MB 离线烘焙)
 │       ├── huanghe_textures/         # 黄鹤楼纹理
 │       ├── tengwang_textures/        # 滕王阁纹理
 │       └── penglai_textures/         # 蓬莱阁纹理

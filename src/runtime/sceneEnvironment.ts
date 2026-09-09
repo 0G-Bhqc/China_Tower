@@ -606,34 +606,58 @@ function createRockShore(
   rockMaterial: THREE.Material,
   name: string,
 ): void {
-  for (let index = 0; index < 22; index += 1) {
-    const angle = (index / 22) * Math.PI * 2 + hashAngle(index);
-    const radius = PLAZA_RADIUS + 0.4 + hashNoise(index, 3) * 2.6;
-    const scale = 0.8 + hashNoise(index, 7) * 1.7;
+  // 细腻化: 每块湖石独立色温 + 顶部苔痕 + 水线深色, 不再是 22 块同色塑料石。
+  const mossMat = new THREE.MeshStandardMaterial({ color: 0x5a6b46, roughness: 1, metalness: 0 });
+  for (let index = 0; index < 26; index += 1) {
+    const angle = (index / 26) * Math.PI * 2 + hashAngle(index);
+    const radius = PLAZA_RADIUS + 0.4 + hashNoise(index, 3) * 2.8;
+    const scale = 0.7 + hashNoise(index, 7) * 1.6;
     // Detail level 1 plus per-vertex fbm displacement turns the icosphere
     // facets into weathered, jagged blocks; flat dodecahedra read as props.
     const geometry = new THREE.DodecahedronGeometry(scale, 1);
     const position = geometry.getAttribute('position');
     const vertex = new THREE.Vector3();
+    const colors = new Float32Array(position.count * 3);
+    const tint = 0.88 + hashNoise(index, 13) * 0.24;
+    const wetLine = -0.25 + hashNoise(index, 15) * 0.2;
     for (let v = 0; v < position.count; v += 1) {
       vertex.fromBufferAttribute(position, v);
       const displacement = 1
-        + (hashNoise(index * 131 + Math.round(vertex.x * 37), Math.round(vertex.y * 41 + vertex.z * 53)) - 0.5) * 0.42;
+        + (hashNoise(index * 131 + Math.round(vertex.x * 37), Math.round(vertex.y * 41 + vertex.z * 53)) - 0.5) * 0.5;
       vertex.multiplyScalar(displacement);
       // Flatten the base so each rock settles into the shoreline instead of
       // perching on a point.
       vertex.y *= 0.62;
       position.setXYZ(v, vertex.x, vertex.y, vertex.z);
+      // 顶点色: 水下深、顶部苔绿过渡, 一块石头三种质感。
+      const moss = THREE.MathUtils.clamp((vertex.y - 0.35) * 0.9, 0, 1) * (hashNoise(v, index) > 0.55 ? 1 : 0.25);
+      const wet = vertex.y < wetLine ? 0.55 : 1;
+      colors[v * 3] = tint * wet * (1 - moss * 0.25);
+      colors[v * 3 + 1] = tint * wet * (1 - moss * 0.08);
+      colors[v * 3 + 2] = tint * wet * (1 - moss * 0.3);
     }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
-    const rock = new THREE.Mesh(geometry, rockMaterial);
+    const tinted = (rockMaterial as THREE.MeshStandardMaterial).clone();
+    tinted.vertexColors = true;
+    tinted.roughness = 0.93 + hashNoise(index, 17) * 0.06;
+    const rock = new THREE.Mesh(geometry, tinted);
     rock.name = `${name}-${index}`;
     rock.position.set(Math.cos(angle) * radius, WATER_Y + 0.12 + hashNoise(index, 11) * 0.5, Math.sin(angle) * radius);
     rock.rotation.set(hashAngle(index * 3), hashAngle(index * 5), hashAngle(index * 7));
-    rock.scale.set(1.5, 0.62, 1.05);
+    // 大小错落: 主石踞坐、副石偎依, 不再是等距糖葫芦。
+    const bulk = index % 5 === 0 ? 1.35 : 1;
+    rock.scale.set(1.5 * bulk, 0.62 * bulk, 1.05 * bulk);
     rock.castShadow = true;
     rock.receiveShadow = true;
     parent.add(rock);
+    // 主石头顶一簇苔: 小而扁的深绿体, 远看是斑、近看是绒。
+    if (index % 4 === 0) {
+      const moss = new THREE.Mesh(new THREE.IcosahedronGeometry(scale * 0.42, 1), mossMat);
+      moss.position.set(rock.position.x, rock.position.y + scale * 0.42, rock.position.z);
+      moss.scale.set(1.2, 0.35, 1);
+      parent.add(moss);
+    }
   }
 }
 
@@ -748,67 +772,187 @@ function createGlowSpriteTexture(): THREE.CanvasTexture {
 }
 
 function createLantern(parent: THREE.Object3D, materials: THREE.Material[], name: string, position: [number, number, number], warmColor: number, glowMaterials: THREE.MeshStandardMaterial[], glowSpriteMaterials: THREE.SpriteMaterial[], glowTexture: THREE.Texture): void {
-  const dark = new THREE.MeshStandardMaterial({ color: 0x28221d, roughness: 0.8, metalness: 0 });
-  materials.push(dark);
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 6), dark);
+  // 六角宫灯重制: 石础 + 竹节杆 + 六方灯笼(骨架+暖纱) + 宝盖 + 流苏, 体量不变、细节翻倍。
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2b241e, roughness: 0.72, metalness: 0.15 });
+  const stoneBaseMat = new THREE.MeshStandardMaterial({ color: 0xb9b2a0, roughness: 0.85, metalness: 0 });
+  materials.push(dark, stoneBaseMat);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.35, 8), stoneBaseMat);
+  base.name = `${name}-base`;
+  base.position.set(position[0], PLAZA_Y + 0.17, position[2]);
+  base.castShadow = true;
+  base.receiveShadow = true;
+  parent.add(base);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 2.1, 8), dark);
   post.name = `${name}-post`;
-  post.position.set(position[0], PLAZA_Y + 1.1, position[2]);
+  post.position.set(position[0], PLAZA_Y + 1.35, position[2]);
   post.castShadow = true;
   parent.add(post);
-  const glow = new THREE.MeshStandardMaterial({ color: warmColor, roughness: 0.42, metalness: 0, emissive: warmColor, emissiveIntensity: 0.55 });
+  // 竹节环两道, 近看有节。
+  for (const ry of [PLAZA_Y + 0.9, PLAZA_Y + 1.7]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.018, 6, 12), dark);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(position[0], ry, position[2]);
+    parent.add(ring);
+  }
+  const glow = new THREE.MeshStandardMaterial({ color: warmColor, roughness: 0.5, metalness: 0, emissive: warmColor, emissiveIntensity: 0.85, transparent: true, opacity: 0.96 });
   materials.push(glow);
   glowMaterials.push(glow);
-  const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.5, 0.36), glow);
+  // 灯纱六方体 + 六根骨架 + 上下灯盘。
+  const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.22, 0.52, 6), glow);
   lantern.name = `${name}-lantern`;
-  lantern.position.set(position[0], PLAZA_Y + 2.32, position[2]);
+  lantern.position.set(position[0], PLAZA_Y + 2.62, position[2]);
   parent.add(lantern);
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.52), dark);
-  cap.position.set(position[0], PLAZA_Y + 2.62, position[2]);
+  const ribMat = dark;
+  for (let rib = 0; rib < 6; rib += 1) {
+    const a = (rib / 6) * Math.PI * 2;
+    const ribMesh = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.54, 0.025), ribMat);
+    ribMesh.position.set(position[0] + Math.cos(a) * 0.245, PLAZA_Y + 2.62, position[2] + Math.sin(a) * 0.245);
+    parent.add(ribMesh);
+  }
+  const trayTop = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.26, 0.06, 6), dark);
+  trayTop.position.set(position[0], PLAZA_Y + 2.91, position[2]);
+  parent.add(trayTop);
+  const trayBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.06, 6), dark);
+  trayBottom.position.set(position[0], PLAZA_Y + 2.33, position[2]);
+  parent.add(trayBottom);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.22, 6), dark);
+  cap.position.set(position[0], PLAZA_Y + 3.05, position[2]);
+  cap.castShadow = true;
   parent.add(cap);
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), glow);
+  bead.position.set(position[0], PLAZA_Y + 3.2, position[2]);
+  parent.add(bead);
+  // 流苏: 线 + 小坠, 风里才是灯。
+  const tasselLine = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 5), dark);
+  tasselLine.position.set(position[0], PLAZA_Y + 2.15, position[2]);
+  parent.add(tasselLine);
+  const tassel = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 8), glow);
+  tassel.position.set(position[0], PLAZA_Y + 1.95, position[2]);
+  parent.add(tassel);
   const halo = new THREE.SpriteMaterial({
     map: glowTexture,
     color: warmColor,
     transparent: true,
-    opacity: 0.34,
+    opacity: 0.4,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
   glowSpriteMaterials.push(halo);
   const haloSprite = new THREE.Sprite(halo);
   haloSprite.name = `${name}-halo`;
-  haloSprite.position.set(position[0], PLAZA_Y + 2.32, position[2]);
-  haloSprite.scale.setScalar(2.8);
+  haloSprite.position.set(position[0], PLAZA_Y + 2.62, position[2]);
+  haloSprite.scale.setScalar(3.2);
   parent.add(haloSprite);
 }
 
-// Per-tower near-field layout: each plaza gets its own tree-ring rhythm,
-// scale range and lantern stations so the three scenes don't read as copies.
+function createTreePit(parent: THREE.Object3D, x: number, z: number, radius: number, stoneMat: THREE.Material, soilMat: THREE.Material): void {  // 树池: 方形石框 + 下沉沃土, 让行道树“种”进台基而不是浮在石皮上。
+  const curbH = 0.28;
+  const half = radius + 0.55;
+  const mkBar = (w: number, d: number, px: number, pz: number): void => {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, curbH, d), stoneMat);
+    bar.position.set(px, PLAZA_Y + curbH / 2, pz);
+    bar.castShadow = true;
+    bar.receiveShadow = true;
+    parent.add(bar);
+  };
+  mkBar(half * 2 + 0.3, 0.3, x, z - half);
+  mkBar(half * 2 + 0.3, 0.3, x, z + half);
+  mkBar(0.3, half * 2 - 0.3, x - half, z);
+  mkBar(0.3, half * 2 - 0.3, x + half, z);
+  const soil = new THREE.Mesh(new THREE.CircleGeometry(radius + 0.35, 20), soilMat);
+  soil.rotation.x = -Math.PI / 2;
+  soil.position.set(x, PLAZA_Y + 0.03, z);
+  soil.receiveShadow = true;
+  parent.add(soil);
+}
+
+// 六角石灯笼: 基础→竿→中台→火袋→笠→宝珠, 通高约 1.9m。
+// 台基上的“家具”而非“植被”: 石质与栏杆同语, 体量低矮不挡楼,
+// 火袋一点暖光随暮色呼吸, 日夜皆宜——替代原来一圈挡视线的行道树。
+function createStoneLantern(
+  parent: THREE.Object3D,
+  materials: THREE.Material[],
+  stoneMat: THREE.Material,
+  name: string,
+  x: number,
+  z: number,
+  glowMaterials: THREE.MeshStandardMaterial[],
+): void {
+  const g = new THREE.Group();
+  g.name = name;
+  g.position.set(x, PLAZA_Y, z);
+  g.rotation.y = hashNoise(x * 3.1, z * 1.7) * Math.PI;
+  const add = (mesh: THREE.Mesh): void => {
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    g.add(mesh);
+  };
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.22, 0.52), stoneMat);
+  base.position.y = 0.11;
+  add(base);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.72, 6), stoneMat);
+  shaft.position.y = 0.58;
+  add(shaft);
+  const mid = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.44), stoneMat);
+  mid.position.y = 1.0;
+  add(mid);
+  const fireGlow = new THREE.MeshStandardMaterial({
+    color: 0xe8b06a, roughness: 0.6, metalness: 0,
+    emissive: 0xd98e58, emissiveIntensity: 0.4, transparent: true, opacity: 0.95,
+  });
+  materials.push(fireGlow);
+  glowMaterials.push(fireGlow);
+  const firebox = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), fireGlow);
+  firebox.name = `${name}-firebox`;
+  firebox.position.y = 1.21;
+  g.add(firebox);
+  // 火袋四角柱 + 上下框, 把暖光“装”进石框里。
+  const frameMat = stoneMat;
+  for (const [fx, fz] of [[-0.16, -0.16], [0.16, -0.16], [-0.16, 0.16], [0.16, 0.16]] as Array<[number, number]>) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.06), frameMat);
+    post.position.set(fx, 1.21, fz);
+    add(post);
+  }
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.1, 0.46), stoneMat);
+  lid.position.y = 1.41;
+  add(lid);
+  const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.44, 0.26, 6), stoneMat);
+  kasa.position.y = 1.59;
+  add(kasa);
+  const jewel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), stoneMat);
+  jewel.position.y = 1.76;
+  add(jewel);
+  parent.add(g);
+}
+
+// Per-tower near-field layout: 不再是一圈行道树墙(挡楼、挡水、挡落日,
+// 与三楼气质皆不合)——改为“四松对称 + 石灯环道 + 六宫灯”的台基家具组合:
+// 迎客松两两对称拱卫御路, 石灯笼沿缘排布压住大圆盘的空旷, 宫灯杆保留作
+// 高点暖光。每楼松位/灯位微差, 远看是同一语系, 近看各有站位。
 const LANDSCAPE_LAYOUTS: Record<PavilionId, {
   crown: 'broad' | 'narrow';
-  treeAngles: number[];
-  treeRadius: [number, number];
-  treeScale: [number, number];
+  /** 对称迎客松 [x, z, scale], 必成双, 御路轴线为对称轴。 */
+  pines: Array<[number, number, number]>;
+  /** 石灯笼环道: 角度(度, 0=+x, 90=+z御路) + 半径, 御路口留空。 */
+  stoneLanternRing: Array<[number, number]>;
   lanterns: Array<[number, number]>;
 }> = {
   yueyang: {
     crown: 'broad',
-    treeAngles: [75, 105, 138, 168, 200, 232, 262, 292, 322, 352],
-    treeRadius: [14, 24],
-    treeScale: [0.85, 1.35],
+    pines: [[-10.5, 15.5, 0.8], [10.5, 15.5, 0.8], [-19, -8, 0.95], [19, -8, 0.95]],
+    stoneLanternRing: [[0, 29.5], [45, 29.5], [135, 29.5], [180, 29.5], [225, 29.5], [270, 29.5], [315, 29.5], [72, 31], [108, 31]],
     lanterns: [[-8.4, 8.4], [8.4, 8.4], [-19, -19], [19, -19], [-22, 3], [22, 3]],
   },
   huanghe: {
     crown: 'narrow',
-    treeAngles: [80, 110, 145, 175, 208, 238, 268, 300, 330, 8],
-    treeRadius: [15, 25],
-    treeScale: [0.95, 1.5],
+    pines: [[-11, 15, 0.85], [11, 15, 0.85], [-20, -7, 1.0], [20, -7, 1.0]],
+    stoneLanternRing: [[0, 29.5], [45, 29.5], [135, 29.5], [180, 29.5], [225, 29.5], [270, 29.5], [315, 29.5], [72, 31], [108, 31]],
     lanterns: [[-9.5, 7], [9.5, 7], [-17, -17], [17, -17], [-24, -4], [24, -4]],
   },
   tengwang: {
     crown: 'broad',
-    treeAngles: [8, 32, 62, 88, 116, 142, 168, 192, 344],
-    treeRadius: [16, 26],
-    treeScale: [0.9, 1.4],
+    pines: [[-10, 16, 0.8], [10, 16, 0.8], [-21, -6, 0.9], [21, -6, 0.9]],
+    stoneLanternRing: [[0, 29.5], [45, 29.5], [135, 29.5], [180, 29.5], [225, 29.5], [270, 29.5], [315, 29.5], [72, 31], [108, 31]],
     lanterns: [[-7, 9.5], [7, 9.5], [-20, -16], [20, -16], [-18, 16], [18, 16]],
   },
 };
@@ -834,19 +978,24 @@ function createLandscape(
   root.add(near, mid);
   const boats: THREE.Group[] = [];
 
-  // Trees on the terrace edge — a fuller ring (10-14), keeping the default
-  // camera corridor (+x/+z ≈ 45°) clear. Tengwang also skips the rear arc
-  // where its veranda band sits.
+  // 迎客松: 四株对称, 御路两侧各一对近景、背后各一对远景。
+  // 石灯笼: 沿缘环道, 御路口留空, 火袋暖光随暮色呼吸。
   const canopy = id === 'tengwang' ? shared.canopyWarm : id === 'huanghe' ? shared.canopyDark : shared.canopyCool;
   const canopyShade = id === 'tengwang' ? shared.canopyWarmShade : id === 'huanghe' ? shared.canopyDarkShade : shared.canopyCoolShade;
   const layout = LANDSCAPE_LAYOUTS[id];
-  layout.treeAngles.forEach((degrees, index) => {
+  const pitStone = new THREE.MeshStandardMaterial({ color: 0xa8a191, roughness: 0.85, metalness: 0 });
+  const pitSoil = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1, metalness: 0 });
+  const stoneLanternMat = new THREE.MeshStandardMaterial({ color: 0xb5ae9c, roughness: 0.82, metalness: 0, envMapIntensity: 0.4 });
+  materials.push(pitStone, pitSoil, stoneLanternMat);
+  layout.pines.forEach(([px, pz, pineScale], index) => {
+    // 相邻两株深浅错开, 对称不呆板。
+    const treeCanopy = index % 2 === 0 ? canopy : canopyShade;
+    createTreePit(near, px, pz, 0.9 * pineScale, pitStone, pitSoil);
+    trees.push(createTree(near, treeCanopy, canopyShade, shared.canopyDepthMaterial, shared.trunk, `${id}-pine-${index}`, [px, PLAZA_Y + 0.05, pz], pineScale, layout.crown));
+  });
+  layout.stoneLanternRing.forEach(([degrees, radius], index) => {
     const angle = (degrees * Math.PI) / 180;
-    const radius = layout.treeRadius[0] + hashNoise(index, id.length) * (layout.treeRadius[1] - layout.treeRadius[0]);
-    const treeScale = layout.treeScale[0] + hashNoise(index, 5) * (layout.treeScale[1] - layout.treeScale[0]);
-    // Every third tree uses the shade material — mixed tonality across the ring.
-    const treeCanopy = index % 3 === 2 ? canopyShade : canopy;
-    trees.push(createTree(near, treeCanopy, canopyShade, shared.canopyDepthMaterial, shared.trunk, `${id}-tree-${index}`, [Math.cos(angle) * radius, PLAZA_Y, Math.sin(angle) * radius], treeScale, layout.crown));
+    createStoneLantern(near, materials, stoneLanternMat, `${id}-stone-lantern-${index}`, Math.cos(angle) * radius, Math.sin(angle) * radius, glowMaterials);
   });
 
   layout.lanterns.forEach(([lanternX, lanternZ], index) => {
@@ -1057,9 +1206,10 @@ export function createSceneEnvironment(
       map: stoneTextures.albedo,
       roughnessMap: stoneTextures.roughness,
       normalMap: stoneTextures.normal,
-      normalScale: new THREE.Vector2(0.7, 0.7),
+      normalScale: new THREE.Vector2(0.85, 0.85),
       roughness: 1,
-      metalness: 0,
+      metalness: 0.02,
+      envMapIntensity: 0.5,
     }),
   );
   plaza.name = 'scene-terrace-plaza';
@@ -1067,6 +1217,99 @@ export function createSceneEnvironment(
   plaza.position.y = PLAZA_Y;
   plaza.receiveShadow = true;
   root.add(plaza);
+
+  // --- 台基细腻化: 压边石环 + 同心御环 + 中央团花, 把“一张石皮”做成可读的铺装 ---
+  // 三层同心环以毫米级抬升叠放(多边形偏移兜底), 近看有收边、远看有向心层次。
+  {
+    const curbMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.82, metalness: 0.02, envMapIntensity: 0.4 });
+    const curb = new THREE.Mesh(new THREE.RingGeometry(PLAZA_RADIUS - 0.85, PLAZA_RADIUS - 0.05, 128), curbMat);
+    curb.name = 'scene-plaza-curb';
+    curb.rotation.x = -Math.PI / 2;
+    curb.position.y = PLAZA_Y + 0.012;
+    curb.receiveShadow = true;
+    root.add(curb);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x7d7666, roughness: 0.9, metalness: 0, envMapIntensity: 0.3 });
+    for (const [inner, outer, y] of [[21.5, 22.1, 0.008], [13.2, 13.55, 0.009], [6.4, 6.7, 0.01]] as Array<[number, number, number]>) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 96), ringMat);
+      ring.name = 'scene-plaza-ring';
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = PLAZA_Y + y;
+      ring.receiveShadow = true;
+      root.add(ring);
+    }
+    // 中央团花: 深色团龙底 + 浅色八瓣线, 纯程序化 Canvas, 不新增贴图资产。
+    const medalCanvas = document.createElement('canvas');
+    medalCanvas.width = 512;
+    medalCanvas.height = 512;
+    const mctx = medalCanvas.getContext('2d');
+    if (mctx) {
+      mctx.fillStyle = '#847c6a';
+      mctx.fillRect(0, 0, 512, 512);
+      mctx.translate(256, 256);
+      for (let petal = 0; petal < 8; petal += 1) {
+        mctx.save();
+        mctx.rotate((petal / 8) * Math.PI * 2);
+        mctx.strokeStyle = 'rgba(240,234,218,0.85)';
+        mctx.lineWidth = 7;
+        mctx.beginPath();
+        mctx.ellipse(0, -118, 44, 96, 0, 0, Math.PI * 2);
+        mctx.stroke();
+        mctx.strokeStyle = 'rgba(60,52,42,0.5)';
+        mctx.lineWidth = 3;
+        mctx.beginPath();
+        mctx.ellipse(0, -118, 30, 78, 0, 0, Math.PI * 2);
+        mctx.stroke();
+        mctx.restore();
+      }
+      mctx.strokeStyle = 'rgba(240,234,218,0.9)';
+      mctx.lineWidth = 10;
+      mctx.beginPath();
+      mctx.arc(0, 0, 52, 0, Math.PI * 2);
+      mctx.stroke();
+      mctx.fillStyle = 'rgba(60,52,42,0.75)';
+      mctx.beginPath();
+      mctx.arc(0, 0, 30, 0, Math.PI * 2);
+      mctx.fill();
+    }
+    const medalTex = new THREE.CanvasTexture(medalCanvas);
+    medalTex.colorSpace = THREE.SRGBColorSpace;
+    medalTex.anisotropy = 8;
+    const medal = new THREE.Mesh(
+      new THREE.CircleGeometry(5.2, 64),
+      new THREE.MeshStandardMaterial({ map: medalTex, roughness: 0.8, metalness: 0.02, envMapIntensity: 0.45 }),
+    );
+    medal.name = 'scene-plaza-medallion';
+    medal.rotation.x = -Math.PI / 2;
+    medal.position.y = PLAZA_Y + 0.014;
+    medal.receiveShadow = true;
+    root.add(medal);
+    // 水线泡沫: 台基与湖面交界的半透明碎浪环, 让“石盘浮于水”有呼吸感。
+    const foamCanvas = document.createElement('canvas');
+    foamCanvas.width = 256;
+    foamCanvas.height = 16;
+    const fctx = foamCanvas.getContext('2d');
+    if (fctx) {
+      fctx.clearRect(0, 0, 256, 16);
+      for (let i = 0; i < 220; i += 1) {
+        const x = hashNoise(i, 77) * 256;
+        const w = 2 + hashNoise(i, 78) * 7;
+        fctx.fillStyle = `rgba(235,242,238,${0.25 + hashNoise(i, 79) * 0.5})`;
+        fctx.fillRect(x, 4 + hashNoise(i, 80) * 8, w, 1.5 + hashNoise(i, 81) * 2);
+      }
+    }
+    const foamTex = new THREE.CanvasTexture(foamCanvas);
+    foamTex.wrapS = THREE.RepeatWrapping;
+    foamTex.repeat.set(24, 1);
+    const foam = new THREE.Mesh(
+      new THREE.RingGeometry(PLAZA_RADIUS + 0.35, PLAZA_RADIUS + 1.6, 128),
+      new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, opacity: 0.55, depthWrite: false, fog: true }),
+    );
+    foam.name = 'scene-shore-foam';
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.y = WATER_Y + 0.06;
+    foam.renderOrder = 3;
+    root.add(foam);
+  }
 
   const skirtMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.98, metalness: 0, side: THREE.DoubleSide });
   // 裙墙水渍：1x64 纵向渐变（上干下湿、底部微绿），圆柱 UV 的 v=0 在底部，
@@ -1110,19 +1353,64 @@ export function createSceneEnvironment(
   createRockShore(root, rockMaterial, 'scene-shore-rock');
 
   // --- Terrace balustrade (望柱 + 寻杖栏杆) & front stair ----------------
-  // A bare disc reads as a plaza, not a 台基. The classic raised-platform
-  // dressing — a ring of balustrade posts with rails and panels, plus a grand
-  // front stair descending to the water — is what makes it architecture.
-  // Instanced meshes keep the whole ring at four draw calls.
-  const balustradeStone = new THREE.MeshStandardMaterial({ color: 0xcfc9b8, roughness: 0.7, metalness: 0 });
+  // 细腻化重制: 车旋望柱(鼓镜+束腰+仰莲+宝珠)、宝瓶纹栏板、打磨寻杖、地栿压边。
+  // 仍全实例化, 6 draw calls 内解决一圈 72 间。
+  const balustradeStone = new THREE.MeshStandardMaterial({ color: 0xd6d0bf, roughness: 0.62, metalness: 0.02, envMapIntensity: 0.5 });
+  const balustradeStoneDark = new THREE.MeshStandardMaterial({ color: 0xb9b2a0, roughness: 0.78, metalness: 0, envMapIntensity: 0.35 });
+  const railPolish = new THREE.MeshStandardMaterial({ color: 0xded8c6, roughness: 0.42, metalness: 0.04, envMapIntensity: 0.65 });
+  // 栏板宝瓶纹: 程序化浅浮雕 Canvas, 既是 albedo 也是 bump, 近看不再是白板。
+  const panelTexCanvas = document.createElement('canvas');
+  panelTexCanvas.width = 256;
+  panelTexCanvas.height = 64;
+  const pctx = panelTexCanvas.getContext('2d');
+  if (pctx) {
+    pctx.fillStyle = '#d6d0bf';
+    pctx.fillRect(0, 0, 256, 64);
+    pctx.strokeStyle = 'rgba(90,80,64,0.55)';
+    pctx.lineWidth = 2;
+    pctx.strokeRect(4, 4, 248, 56);
+    for (let v = 0; v < 4; v += 1) {
+      const cx = 32 + v * 64;
+      pctx.beginPath();
+      pctx.ellipse(cx, 32, 14, 20, 0, 0, Math.PI * 2);
+      pctx.stroke();
+      pctx.beginPath();
+      pctx.arc(cx, 32, 5, 0, Math.PI * 2);
+      pctx.stroke();
+      pctx.beginPath();
+      pctx.moveTo(cx - 22, 32);
+      pctx.lineTo(cx - 12, 32);
+      pctx.moveTo(cx + 12, 32);
+      pctx.lineTo(cx + 22, 32);
+      pctx.stroke();
+    }
+  }
+  const panelTex = new THREE.CanvasTexture(panelTexCanvas);
+  panelTex.colorSpace = THREE.SRGBColorSpace;
+  panelTex.wrapS = THREE.RepeatWrapping;
+  panelTex.anisotropy = 8;
+  const panelMat = new THREE.MeshStandardMaterial({ map: panelTex, bumpMap: panelTex, bumpScale: 0.6, roughness: 0.7, metalness: 0, envMapIntensity: 0.4 });
+  // 车旋望柱剖面: 方础→鼓镜→束腰→仰莲→柱身→宝珠, Lathe 一次车出。
+  const postProfile: THREE.Vector2[] = [];
+  postProfile.push(new THREE.Vector2(0.16, 0));
+  postProfile.push(new THREE.Vector2(0.16, 0.08));
+  postProfile.push(new THREE.Vector2(0.11, 0.12));
+  postProfile.push(new THREE.Vector2(0.085, 0.3));
+  postProfile.push(new THREE.Vector2(0.105, 0.52));
+  postProfile.push(new THREE.Vector2(0.085, 0.72));
+  postProfile.push(new THREE.Vector2(0.11, 0.82));
+  postProfile.push(new THREE.Vector2(0.07, 0.88));
+  postProfile.push(new THREE.Vector2(0.0, 1.02));
+  const postGeo = new THREE.LatheGeometry(postProfile, 10);
   const bldRadius = PLAZA_RADIUS - 0.3;
   const postCount = 72;
   const angleStep = (Math.PI * 2) / postCount;
   const balusterDummy = new THREE.Object3D();
-  const postMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 1.0, 0.16), balustradeStone, postCount);
-  const capMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.32, 0.09, 0.32), balustradeStone, postCount);
-  const panelMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.9, 0.4, 0.06), balustradeStone, postCount);
-  const railMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.96, 0.1, 0.1), balustradeStone, postCount);
+  const postMesh = new THREE.InstancedMesh(postGeo, balustradeStone, postCount);
+  const capMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 12, 10), railPolish, postCount);
+  const panelMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.9, 0.42, 0.09), panelMat, postCount);
+  const railMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.96, 0.12, 0.16), railPolish, postCount);
+  const plinthMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(3.0, 0.16, 0.24), balustradeStoneDark, postCount);
   const stairAngle = Math.PI / 2; // +z front, facing the default camera corridor
   for (let index = 0; index < postCount; index += 1) {
     const angle = index * angleStep;
@@ -1134,7 +1422,8 @@ export function createSceneEnvironment(
     balusterDummy.scale.set(1, 1, 1);
     const px = Math.cos(angle) * bldRadius;
     const pz = Math.sin(angle) * bldRadius;
-    balusterDummy.position.set(px, PLAZA_Y + 0.5, pz);
+    // 车旋望柱立于地栿之上, 柱础与地面齐平。
+    balusterDummy.position.set(px, PLAZA_Y + 0.02, pz);
     balusterDummy.updateMatrix();
     postMesh.setMatrixAt(index, balusterDummy.matrix);
     if (inStairGap) {
@@ -1143,15 +1432,22 @@ export function createSceneEnvironment(
       balusterDummy.scale.setScalar(0.0001);
       balusterDummy.updateMatrix();
     }
-    balusterDummy.position.set(Math.cos(midAngle) * bldRadius, PLAZA_Y + 0.55, Math.sin(midAngle) * bldRadius);
+    balusterDummy.position.set(Math.cos(midAngle) * bldRadius, PLAZA_Y + 0.52, Math.sin(midAngle) * bldRadius);
     balusterDummy.scale.x = inStairGap ? 0.0001 : chord / 2.9;
+    balusterDummy.scale.y = 1;
+    balusterDummy.scale.z = 1;
     balusterDummy.updateMatrix();
     panelMesh.setMatrixAt(index, balusterDummy.matrix);
+    // 地栿: 栏板之下的一圈压边石, 交圈收口。
+    balusterDummy.position.y = PLAZA_Y + 0.1;
+    balusterDummy.updateMatrix();
+    plinthMesh.setMatrixAt(index, balusterDummy.matrix);
     balusterDummy.position.y = PLAZA_Y + 0.92;
     balusterDummy.updateMatrix();
     railMesh.setMatrixAt(index, balusterDummy.matrix);
     if (!inStairGap) {
-      balusterDummy.position.set(px, PLAZA_Y + 1.04, pz);
+      // 宝珠立于柱头仰莲之上。
+      balusterDummy.position.set(px, PLAZA_Y + 1.12, pz);
       balusterDummy.scale.setScalar(1);
       balusterDummy.updateMatrix();
       capMesh.setMatrixAt(index, balusterDummy.matrix);
@@ -1161,29 +1457,41 @@ export function createSceneEnvironment(
       capMesh.setMatrixAt(index, balusterDummy.matrix);
     }
   }
-  for (const mesh of [postMesh, capMesh, panelMesh, railMesh]) {
+  for (const mesh of [postMesh, capMesh, panelMesh, railMesh, plinthMesh]) {
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     root.add(mesh);
   }
 
-  // Grand front stair: three steps down from the rim toward the water with
-  // 垂带 cheeks flanking.
-  const stepWidth = 6.4;
-  const stepDepth = 0.6;
-  for (let index = 0; index < 3; index += 1) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(stepWidth, 0.3, stepDepth), balustradeStone);
-    step.position.set(0, PLAZA_Y - 0.17 - index * 0.3, bldRadius + 0.3 + index * stepDepth);
+  // 御路踏道: 五级 + 垂带 + 中央御路浮雕(团花), 不再是三块白板。
+  const stepWidth = 7.2;
+  const stepDepth = 0.62;
+  const stepRiserMat = new THREE.MeshStandardMaterial({ color: 0x9a937f, roughness: 0.85, metalness: 0 });
+  for (let index = 0; index < 5; index += 1) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(stepWidth, 0.26, stepDepth), index === 2 ? panelMat : balustradeStone);
+    step.name = `scene-front-step-${index}`;
+    step.position.set(0, PLAZA_Y - 0.12 - index * 0.26, bldRadius + 0.3 + index * stepDepth);
+    step.castShadow = true;
     step.receiveShadow = true;
     root.add(step);
   }
   for (const side of [-1, 1]) {
-    const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.2, stepDepth * 3 + 0.3), balustradeStone);
-    cheek.position.set(side * (stepWidth / 2 + 0.275), PLAZA_Y - 0.2, bldRadius + 0.3 + stepDepth);
+    const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, stepDepth * 5 + 0.4), balustradeStoneDark);
+    cheek.position.set(side * (stepWidth / 2 + 0.3), PLAZA_Y - 0.3, bldRadius + 0.3 + stepDepth * 2);
     cheek.castShadow = true;
     cheek.receiveShadow = true;
     root.add(cheek);
+    // 垂带端头小石狮(抽象): 球体 + 方座, 点到为止不抢戏。
+    const lionBase = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.35, 0.55), balustradeStoneDark);
+    lionBase.position.set(side * (stepWidth / 2 + 0.3), PLAZA_Y + 0.62, bldRadius + 0.1);
+    lionBase.castShadow = true;
+    root.add(lionBase);
+    const lion = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), balustradeStone);
+    lion.position.set(side * (stepWidth / 2 + 0.3), PLAZA_Y + 0.98, bldRadius + 0.1);
+    lion.scale.set(1, 1.15, 1);
+    lion.castShadow = true;
+    root.add(lion);
   }
 
   // --- Water (middle field, runs to the fogged horizon) -----------------

@@ -98,11 +98,48 @@ export function createPavilionStele(id: PavilionId): THREE.Group {
   };
 
   // Total height ≈ 0.42 (base) + 0.3 (step) + faceHeight slab + 0.28 (cap).
-  addBox('base', [spec.faceWidth * 1.55, 0.42, spec.faceWidth * 0.95], [0, 0.21, 0]);
-  addBox('step', [spec.faceWidth * 1.3, 0.3, spec.faceWidth * 0.8], [0, 0.55, 0]);
+  // 细腻化: 须弥座收分三叠 + 碑身线脚边框 + 螭首碑帽 + 地面拜石, 碑不再是四块白盒。
+  addBox('plinth-ground', [spec.faceWidth * 2.1, 0.12, spec.faceWidth * 1.4], [0, 0.06, 0.3]);
+  addBox('base-lower', [spec.faceWidth * 1.62, 0.22, spec.faceWidth * 1.0], [0, 0.2, 0]);
+  addBox('base-waist', [spec.faceWidth * 1.42, 0.16, spec.faceWidth * 0.86], [0, 0.38, 0]);
+  addBox('base', [spec.faceWidth * 1.55, 0.24, spec.faceWidth * 0.95], [0, 0.56, 0]);
+  addBox('step', [spec.faceWidth * 1.3, 0.3, spec.faceWidth * 0.8], [0, 0.8, 0]);
   const slabDepth = spec.faceWidth * 0.22;
-  addBox('slab', [spec.faceWidth * 1.06, spec.faceHeight + 0.62, slabDepth], [0, 0.7 + (spec.faceHeight + 0.62) / 2, 0]);
-  addBox('cap', [spec.faceWidth * 1.24, 0.28, slabDepth * 1.35], [0, 0.7 + spec.faceHeight + 0.62 + 0.14, 0]);
+  const slabH = spec.faceHeight + 0.62;
+  addBox('slab', [spec.faceWidth * 1.06, slabH, slabDepth], [0, 0.95 + slabH / 2, 0]);
+  // 碑身四周边框线脚(细窄凸线), 压住碑面与碑侧的生硬交界。
+  const frameMat = bodyMaterial;
+  const frameT = 0.07;
+  const frameY = 0.95 + slabH / 2;
+  const frameW = spec.faceWidth * 1.06 + 0.04;
+  for (const [w, h, px, py] of [
+    [frameW, frameT, 0, frameY + slabH / 2 - frameT / 2],
+    [frameW, frameT, 0, frameY - slabH / 2 + frameT / 2],
+  ] as Array<[number, number, number, number]>) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, slabDepth + 0.06), frameMat);
+    bar.position.set(px, py, 0);
+    bar.castShadow = true;
+    bar.receiveShadow = true;
+    group.add(bar);
+  }
+  for (const side of [-1, 1]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(frameT, slabH, slabDepth + 0.06), frameMat);
+    bar.position.set(side * (frameW / 2 - frameT / 2), frameY, 0);
+    bar.castShadow = true;
+    bar.receiveShadow = true;
+    group.add(bar);
+  }
+  addBox('cap', [spec.faceWidth * 1.3, 0.22, slabDepth * 1.5], [0, 0.95 + slabH + 0.11, 0]);
+  // 螭首: 碑帽之上的小小卷尾, 抽象为叠涩 + 圆首, 剪影不再是一条直线。
+  const chiBase = new THREE.Mesh(new THREE.BoxGeometry(spec.faceWidth * 0.7, 0.16, slabDepth * 0.9), bodyMaterial);
+  chiBase.position.set(0, 0.95 + slabH + 0.3, 0);
+  chiBase.castShadow = true;
+  group.add(chiBase);
+  const chiHead = new THREE.Mesh(new THREE.SphereGeometry(spec.faceWidth * 0.2, 12, 10), bodyMaterial);
+  chiHead.position.set(0, 0.95 + slabH + 0.48, 0);
+  chiHead.scale.set(1.25, 0.8, 0.9);
+  chiHead.castShadow = true;
+  group.add(chiHead);
 
   // Inscribed face slightly proud of the slab front to avoid z-fighting.
   const face = createPlaqueMesh({
@@ -115,7 +152,7 @@ export function createPavilionStele(id: PavilionId): THREE.Group {
     position: [0, 0, 0],
   });
   face.name = `${id}-stele-inscription`;
-  face.position.set(0, 0.7 + 0.31 + (spec.faceHeight + 0.62) / 2, slabDepth / 2 + 0.012);
+  face.position.set(0, 0.95 + slabH / 2, slabDepth / 2 + 0.045);
   group.add(face);
 
   group.position.set(spec.position[0], 0, spec.position[1]);

@@ -6,7 +6,7 @@ const workspace = resolve(import.meta.dirname, '..');
 const manifestPath = resolve(workspace, 'public/assets/pavilion-assets.manifest.json');
 const verifyHashes = process.argv.includes('--verify-hashes');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-const HERO_OVERSIZE_ALLOWLIST = ['/assets/tengwang-high-precision/tengwang-22753718.glb'];
+const HERO_OVERSIZE_ALLOWLIST = ['/assets/tengwang-high-precision/tengwang-master-web.glb'];
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

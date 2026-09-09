@@ -26,8 +26,9 @@ const runtimeAssets = {
   tengwang: {
     label: '滕王阁',
     loader: 'createTengwangTowerHighModel',
-    // Hermes整理后的最新主体 GLB；仅作为 Hero/LOD0，普通设备使用下面的压缩 LOD。
-    files: ['assets/tengwang-high-precision/tengwang-22753718.glb'],
+    // 离线烘焙的 Web 版大师版 (gltfpack -si 0.36 -cc -kn -vpf -vtf)；
+    // 烘焙源 406MB 原始 GLB 已移出 public（见 3D资产/tengwang-master-source/）。
+    files: ['assets/tengwang-high-precision/tengwang-master-web.glb'],
     lod1Files: ['assets/tengwang-main-tower-lod1.glb'],
     lod2Files: ['assets/tengwang-main-tower-lod2.glb'],
   },

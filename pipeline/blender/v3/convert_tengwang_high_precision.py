@@ -11,7 +11,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(r"E:\Station\China_Tower")
 INPUT_FBX = PROJECT_ROOT / "evidence/3d-assets/jobs/tengwang/outputs/full-scene-22753718.fbx"
-OUTPUT_GLB = PROJECT_ROOT / "public/assets/tengwang-high-precision/tengwang-22753718.glb"
+OUTPUT_GLB = PROJECT_ROOT / "3D资产/tengwang-master-source/tengwang-22753718.glb"
 REPORT_PATH = PROJECT_ROOT / "evidence/v3/tengwang/dissection/run-004/conversion-report.json"
 
 

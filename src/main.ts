@@ -22,6 +22,24 @@ import { detectDeviceQualityProfile, createAdaptiveGovernor } from './runtime/De
 import type { PavilionModelLoadOptions } from './runtime/loadVerifiedGlb';
 import { getPavilionAssemblyRuntime } from './runtime/PavilionAssemblyRuntime';
 
+// 启动报错显形: 顶层初始化(WebGL/环境/面板)一旦抛错, 原先只会永远转圈。
+// 这里把首个错误写进 loader 状态行, 卡住时一眼可见原因。
+function showBootError(message: string, detail?: unknown): void {
+  const loaderStatus = document.getElementById('loader-status');
+  if (loaderStatus) loaderStatus.textContent = message;
+  console.error('[boot]', message, detail ?? '');
+}
+window.addEventListener('error', (event) => {
+  if (window.__CHINA_TOWERS_READY__) return;
+  const msg = event.message || '未知错误';
+  showBootError(`启动受阻 · ${String(msg).slice(0, 60)} · 请截图控制台发我`);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  if (window.__CHINA_TOWERS_READY__) return;
+  const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? '');
+  showBootError(`资源加载受阻 · ${reason.slice(0, 60)} · 请截图控制台发我`);
+});
+
 declare global {
   interface Window {
     __CHINA_TOWERS_READY__?: boolean;
@@ -63,7 +81,6 @@ declare global {
     __CHINA_TOWERS_UI__?: {
       setLoaderVisible(visible: boolean): void;
       setLoaderProgress(ratio: number, status: string): void;
-      setModelMeta(meta: { modelName: string; runtimeLod: string; renderTriangles: number; partCount: number }): void;
     };
     activeModel?: THREE.Group;
     __activeModelDebug?: {
@@ -82,6 +99,7 @@ const canvas = document.querySelector<HTMLCanvasElement>('#scene');
 if (!canvas) throw new Error('Missing #scene canvas');
 const sceneCanvas: HTMLCanvasElement = canvas;
 const title = document.querySelector<HTMLElement>('#tower-title');
+const seal = document.querySelector<HTMLElement>('#tower-seal');
 const english = document.querySelector<HTMLElement>('#tower-english');
 const location = document.querySelector<HTMLElement>('#tower-location');
 const description = document.querySelector<HTMLElement>('#tower-description');
@@ -105,13 +123,21 @@ const lightMode: 'neutral' | 'grazing' | 'reference' = requestedLightMode === 'n
   : 'reference';
 
 const deviceQuality = detectDeviceQualityProfile();
-const renderer = new THREE.WebGLRenderer({
-  canvas: sceneCanvas,
-  antialias: deviceQuality.id !== 'mobile',
-  alpha: false,
-  powerPreference: 'high-performance',
-  logarithmicDepthBuffer: true,
-});
+let renderer: THREE.WebGLRenderer;
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas: sceneCanvas,
+    antialias: deviceQuality.id !== 'mobile',
+    alpha: false,
+    powerPreference: 'high-performance',
+    logarithmicDepthBuffer: true,
+  });
+} catch (error) {
+  // 无 WebGL 的机器(远程桌面/旧驱动/被禁用的 GPU) previously 卡死转圈:
+  // 直接说明原因, 不再静默。
+  showBootError('WebGL 初始化失败 · 请换 Chrome/Edge 并开启硬件加速后重试', error);
+  throw error;
+}
 configureYueyangTowerRenderer(renderer);
 renderer.shadowMap.enabled = !noShadow;
 renderer.shadowMap.type = deviceQuality.shadowTechnique === 'pcf-soft' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
@@ -278,8 +304,16 @@ let selectionSequence = 0;
 let activeLoadController: AbortController | null = null;
 let activeView = reviewView ?? 'default';
 let cameraSafetyBounds: THREE.Box3 | null = null;
+// 碰撞外壳与包络跨度随 safetyBounds 一起在 frameModel 里 baked:
+/// 热循环里不再 clone()/getSize()/new 数组, 零分配。
+let cameraCollisionBounds: THREE.Box3 | null = null;
+let cameraSafetySpan = 1;
 let cameraGroundY = 0;
 let cameraClearance = 0.35;
+// 热循环 scratch: 约束推挤 / 飞行插值 / 漂移步进共用, 逐帧零 new。
+const constrainScratch = new THREE.Vector3();
+const flightScratchA = new THREE.Vector3();
+const flightScratchB = new THREE.Vector3();
 
 const HIGH_MODEL_IDS = new Set<PavilionId>(['yueyang', 'huanghe', 'tengwang']);
 
@@ -289,7 +323,7 @@ function frameModel(view = activeView) {
   if (!activeModel) return;
   const lowAngleActive = view === 'low-angle';
   lowAngleButton?.setAttribute('aria-pressed', String(lowAngleActive));
-  if (lowAngleButton) lowAngleButton.textContent = lowAngleActive ? '退出仰视' : '仰视建筑';
+  if (lowAngleButton) lowAngleButton.innerHTML = lowAngleActive ? '退出仰视 <kbd>V</kbd>' : '仰视建筑 <kbd>V</kbd>';
   const bounds = new THREE.Box3().setFromObject(activeModel);
   // Loaders that carry a large site (e.g. the Penglai walled courtyard) expose
   // a focus box around the main building; frame the camera on that so the
@@ -304,6 +338,8 @@ function frameModel(view = activeView) {
   cameraSafetyBounds = bounds.clone();
   cameraGroundY = Math.max(poeticEnvironment.groundY, bounds.min.y);
   cameraClearance = Math.max(0.2, Math.min(0.6, span * 0.012));
+  cameraCollisionBounds = bounds.clone().expandByScalar(cameraClearance);
+  cameraSafetySpan = bounds.getSize(new THREE.Vector3()).length();
   const distanceMultiplier = activeSpec.id === 'tengwang'
     ? (window.innerWidth < 720 ? 1.15 : 1.45)
     : (window.innerWidth < 720 ? 1.96 : 1.62);
@@ -345,7 +381,9 @@ function frameModel(view = activeView) {
     // stand: huanghe's ridges measured the weakest footprint of the three
     // purely because there was no sky left to show them in. Dropping to 0.46
     // puts the horizon near the upper third without cropping the roof.
-    const camHeight = activeSpec.id === 'huanghe' ? 0.46 : 0.34;
+    // 2026-09 实测修正: targetLift 0.5 把视点钉在屋顶、塔身被压出画底,
+    // NDC 中心 y=-0.8。降到 0.04 让塔居中、水面作前景, 相机高度同步回落。
+    const camHeight = activeSpec.id === 'huanghe' ? 0.32 : 0.34;
     camera.position.set(
       centre.x + Math.sin(defaultAzimuth) * distance * 1.16,
       centre.y + distance * camHeight,
@@ -353,8 +391,10 @@ function frameModel(view = activeView) {
     );
     // The tengwang podium is wide and low relative to the tower, so the
     // default target needs more lift to keep the roof crown in frame;
-    // huanghe raises the target further so the frame tilts into the sky.
-    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : activeSpec.id === 'huanghe' ? 0.5 : 0.14;
+    // huanghe keeps the target near mid-tower so the whole body (not just
+    // the roof) sits in frame with water as foreground (NDC 中心 -0.43 仍踩底:
+    // 视点高于塔心 4.6m, 再降到 0.04; 岳阳同理 0.14→0.08)。
+    const targetLift = activeSpec.id === 'tengwang' ? 0.2 : activeSpec.id === 'huanghe' ? 0.04 : activeSpec.id === 'yueyang' ? 0.02 : 0.14;
     controls.target.copy(centre).add(new THREE.Vector3(0, size.y * targetLift, 0));
   }
   camera.near = view === 'low-angle'
@@ -402,43 +442,52 @@ function constrainInspectionCamera(): void {
   // boundary is smooth, so the resolved path reads as the camera gliding
   // around the obstacle instead of a snap.
   for (const obstacle of cameraObstacles) {
-    const offset = camera.position.clone().sub(obstacle.center);
-    const distance = offset.length();
+    constrainScratch.copy(camera.position).sub(obstacle.center);
+    const distance = constrainScratch.length();
     const clearance = obstacle.radius + Math.max(cameraClearance, 0.6);
     if (distance >= clearance) continue;
     if (distance < 1e-4) {
       camera.position.x = obstacle.center.x + clearance;
       continue;
     }
-    camera.position.copy(obstacle.center).addScaledVector(offset.divideScalar(distance), clearance);
+    camera.position.copy(obstacle.center).addScaledVector(constrainScratch.divideScalar(distance), clearance);
     if (camera.position.y < minimumY) camera.position.y = minimumY;
   }
   if (activeSpec.id === 'tengwang') return;
 
-  const collisionBounds = cameraSafetyBounds.clone().expandByScalar(cameraClearance);
+  // 零分配版 soft push: 原 exits 数组 + sort 每帧 new 5 个对象, 改手动取最小。
+  const collisionBounds = cameraCollisionBounds ?? cameraSafetyBounds;
   if (collisionBounds.containsPoint(camera.position)) {
-    // Soft push: only nudge toward the nearest boundary, don't snap.
-    const exits = [
-      { distance: Math.abs(camera.position.x - collisionBounds.min.x), axis: 'x' as const, value: collisionBounds.min.x },
-      { distance: Math.abs(camera.position.x - collisionBounds.max.x), axis: 'x' as const, value: collisionBounds.max.x },
-      { distance: Math.abs(camera.position.z - collisionBounds.min.z), axis: 'z' as const, value: collisionBounds.min.z },
-      { distance: Math.abs(camera.position.z - collisionBounds.max.z), axis: 'z' as const, value: collisionBounds.max.z },
-    ].sort((a, b) => a.distance - b.distance);
-    const nearestExit = exits[0];
-    if (nearestExit.distance < 0.05) {
-      camera.position[nearestExit.axis] = nearestExit.value;
+    let exitAxis: 'x' | 'z' = 'x';
+    let exitValue = collisionBounds.min.x;
+    let exitDistance = Math.abs(camera.position.x - exitValue);
+    const testExit = (axis: 'x' | 'z', value: number, at: number): void => {
+      const candidate = Math.abs(at - value);
+      if (candidate < exitDistance) {
+        exitDistance = candidate;
+        exitAxis = axis;
+        exitValue = value;
+      }
+    };
+    // 注: testExit 闭包每帧分配一次(单个函数对象), 相对原 5 对象+排序可忽略;
+    // 若需绝对零分配可继续内联展开。
+    testExit('x', collisionBounds.max.x, camera.position.x);
+    testExit('z', collisionBounds.min.z, camera.position.z);
+    testExit('z', collisionBounds.max.z, camera.position.z);
+    if (exitDistance < 0.05) {
+      camera.position[exitAxis] = exitValue;
     } else {
       const factor = 0.25;
-      camera.position[nearestExit.axis] = THREE.MathUtils.lerp(
-        camera.position[nearestExit.axis],
-        nearestExit.value,
+      camera.position[exitAxis] = THREE.MathUtils.lerp(
+        camera.position[exitAxis],
+        exitValue,
         factor
       );
     }
   }
 
   const distanceToModel = cameraSafetyBounds.distanceToPoint(camera.position);
-  const desiredNear = THREE.MathUtils.clamp(distanceToModel * 0.08, 0.03, Math.max(0.08, cameraSafetyBounds.getSize(new THREE.Vector3()).length() / 100));
+  const desiredNear = THREE.MathUtils.clamp(distanceToModel * 0.08, 0.03, Math.max(0.08, cameraSafetySpan / 100));
   // Near-plane hysteresis. `near` sets how the renderer's logarithmic depth
   // buffer distributes precision, so retuning it continuously while orbiting
   // shifts every depth value each frame: surfaces sitting a hair apart — the
@@ -454,9 +503,12 @@ function constrainInspectionCamera(): void {
 }
 
 function setLowAngleView(enabled: boolean): void {
+  // 仰视与诗境互斥: 进仰视先清诗境(氛围/漂移/诗句卡/焦距), 否则残留暮色与长焦。
+  cancelCueFlight();
+  hideSceneReading();
   activeView = enabled ? 'low-angle' : 'default';
   lowAngleButton?.setAttribute('aria-pressed', String(enabled));
-  if (lowAngleButton) lowAngleButton.textContent = enabled ? '退出仰视' : '仰视建筑';
+  if (lowAngleButton) lowAngleButton.innerHTML = enabled ? '退出仰视 <kbd>V</kbd>' : '仰视建筑 <kbd>V</kbd>';
   frameModel(activeView);
   if (status) status.textContent = enabled
     ? '仰视模式 · 拖拽观察檐下与牌匾'
@@ -475,14 +527,16 @@ function setExploded(next: boolean) {
       part.position.copy(origin).multiplyScalar(next ? 1.16 : 1);
     });
   }
-  if (explodeButton) explodeButton.textContent = next ? '收拢构件' : '展开构件';
+  if (explodeButton) explodeButton.innerHTML = next ? '收拢构件 <kbd>E</kbd>' : '展开构件 <kbd>E</kbd>';
   explodeButton?.setAttribute('aria-pressed', String(next));
   if (status) status.textContent = next ? '构件展开 · 旋转查看层次' : STATUS_IDLE;
 }
 
+const SEAL_TEXT: Record<string, string> = { yueyang: '岳陽', huanghe: '黃鶴', tengwang: '滕王' };
 function updateCopy(spec: PavilionSpec) {
   document.documentElement.style.setProperty('--accent', spec.accent);
   if (title) title.textContent = spec.nameCN;
+  if (seal) seal.textContent = SEAL_TEXT[spec.id] ?? spec.nameCN;
   if (english) english.textContent = spec.nameEN;
   if (location) location.textContent = `${spec.location} · ${spec.era}`;
   if (description) description.textContent = spec.description;
@@ -523,13 +577,23 @@ const readingObservation = document.querySelector<HTMLElement>('#reading-observa
 type CueFlight = {
   fromPos: THREE.Vector3;
   toPos: THREE.Vector3;
+  midPos: THREE.Vector3;
   fromTarget: THREE.Vector3;
+  midTarget: THREE.Vector3;
   toTarget: THREE.Vector3;
+  fromFov: number;
+  toFov: number;
+  drift: THREE.Vector3;
   start: number;
   duration: number;
 };
 
 let cueFlight: CueFlight | null = null;
+let cueHold: { drift: THREE.Vector3; settledAt: number } | null = null;
+let activeCueId: string | null = null;
+// 落幅漂移的帧间隔提示与锚点(防漂移失控), 由 render() 每帧刷新。
+let renderDeltaHint = 0.016;
+const holdAnchorPos = new THREE.Vector3();
 let readingTimer: number | null = null;
 // While a poetic cue is active the key light drifts toward the cue's mood sun
 // (the environment module blends fog/water in parallel) and the hemisphere
@@ -557,10 +621,15 @@ function armReadingAutohide(ms: number = READING_AUTOHIDE_MS): void {
 function showSceneReading(cue: SceneCue): void {
   if (!readingPanel || !readingTitle || !readingLine || !readingObservation) return;
   readingTitle.textContent = cue.title;
-  readingLine.textContent = cue.line;
-  readingObservation.textContent = cue.observation;
+  readingLine.textContent = `「${cue.line}」`;
+  const shotEl = document.querySelector<HTMLElement>('#reading-shot');
+  if (shotEl) {
+    shotEl.textContent = cue.shot ? `◈ 运镜 · ${cue.shot}` : '';
+    shotEl.hidden = !cue.shot;
+  }
+  readingObservation.textContent = `${cue.observation}`;
   readingPanel.classList.add('is-visible');
-  armReadingAutohide();
+  armReadingAutohide(14000);
 }
 
 // 诗句卡手动收起 + 悬停暂留: 关闭按钮立收; 鼠标停在卡上时不自动消失,
@@ -579,28 +648,79 @@ readingPanel?.addEventListener('mouseleave', () => {
 function buildCueButtons(): void {
   if (!cueButtonsContainer) return;
   cueButtonsContainer.innerHTML = '';
-  for (const cue of getSceneSpec(activeSpec.id).cues) {
+  const cues = getSceneSpec(activeSpec.id).cues;
+  cues.forEach((cue, index) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = cue.title;
-    button.setAttribute('aria-label', `诗境机位 · ${cue.title} · ${cue.line}`);
+    button.dataset.cue = cue.id;
+    const numeral = ['壹', '贰', '叁'][index] ?? String(index + 1);
+    button.innerHTML = `<i>${numeral} · ${cue.title}</i><span>${cue.line}</span>`;
+    button.setAttribute('aria-label', `诗境机位${numeral} · ${cue.title} · ${cue.line} · ${cue.shot ?? ''}`);
+    button.title = cue.shot ? `${cue.line} —— ${cue.shot}` : cue.line;
     button.addEventListener('click', () => flyToCue(cue));
     cueButtonsContainer.appendChild(button);
+  });
+  markActiveCueButton();
+}
+
+function markActiveCueButton(): void {
+  if (!cueButtonsContainer) return;
+  for (const btn of cueButtonsContainer.querySelectorAll<HTMLButtonElement>('button[data-cue]')) {
+    const on = btn.dataset.cue === activeCueId;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-pressed', String(on));
   }
 }
 
 function flyToCue(cue: SceneCue): void {
-  cueFlight = {
-    fromPos: camera.position.clone(),
-    toPos: new THREE.Vector3(...cue.camera.position),
-    fromTarget: controls.target.clone(),
-    toTarget: new THREE.Vector3(...cue.camera.target),
-    start: performance.now(),
-    duration: 1900,
-  };
-  controls.enabled = false;
-  poeticEnvironment.setMood(cue.mood);
+  const toPos = new THREE.Vector3(...cue.camera.position);
+  const toTarget = new THREE.Vector3(...cue.camera.target);
+  const fromPos = camera.position.clone();
+  const fromTarget = controls.target.clone();
+  // 意象构图: 只在“看出去”的镜位(水/天/台)向太阳方位横移, 让日轮霞光
+  // 入画、主阁偏居一侧; 看塔看阶的镜位保持中轴, 横移只会把塔推出画外
+  // (2026-09 实测: 6m 横移把 31m 塔顶出 NDC 18 个单位)。
   const preset = TOWER_SUN_PRESETS[activeSpec.id];
+  const sunFlat = new THREE.Vector3(preset.direction[0], 0, preset.direction[2]).normalize();
+  const lateral = new THREE.Vector3(-sunFlat.z, 0, sunFlat.x);
+  const camDistance = toPos.distanceTo(toTarget);
+  const isWaterCue = cue.focus === 'water' || cue.focus === 'horizon';
+  const composesLandscape = cue.focus === 'water' || cue.focus === 'horizon' || cue.focus === 'platform';
+  const frameShift = composesLandscape
+    ? (cue.mood.name === 'clearDay' ? 1.8 : 4) * THREE.MathUtils.clamp(camDistance / 40, 0.35, 1.1)
+    : 0;
+  toPos.addScaledVector(lateral, frameShift);
+  toTarget.addScaledVector(lateral, frameShift * 0.55);
+  // 电影弧线: 中点抬升 + 侧弯, 飞行先扬后落, 不再是直线穿楼。
+  const dist = fromPos.distanceTo(toPos);
+  const lift = THREE.MathUtils.clamp(dist * 0.1, 1.2, 5);
+  const midPos = fromPos.clone().lerp(toPos, 0.5);
+  midPos.y += lift;
+  midPos.addScaledVector(lateral, -frameShift * 0.25);
+  const midTarget = fromTarget.clone().lerp(toTarget, 0.5);
+  midTarget.y += lift * 0.3;
+  const toFov = cue.camera.fov ?? 42;
+  cueFlight = {
+    fromPos,
+    toPos,
+    midPos,
+    fromTarget,
+    midTarget,
+    toTarget,
+    fromFov: (camera as THREE.PerspectiveCamera).fov,
+    toFov,
+    drift: new THREE.Vector3(...(cue.drift ?? [0, 0, 0])),
+    start: performance.now(),
+    // 按距离定长: 近景 2.4s, 远景 3.4s, 意境需要呼吸感。
+    duration: THREE.MathUtils.clamp(2100 + dist * 22, 2400, 3400),
+  };
+  cueHold = null;
+  activeCueId = cue.id;
+  markActiveCueButton();
+  document.body.classList.add('in-cue');
+  controls.enabled = false;
+  controls.autoRotate = false;
+  poeticEnvironment.setMood(cue.mood);
   const moodSunRatio = cue.mood.sunIntensity / preset.intensity;
   sunMood = {
     color: cue.mood.sunColor,
@@ -618,25 +738,30 @@ function flyToCue(cue: SceneCue): void {
   // deeper 落霞 dusk) sinks warm and dark — the difference between 晨雾 and 落霞.
   postStack?.setMoodBias(
     cue.mood.name === 'dawn'
-      ? { tint: [0.98, 1.0, 1.04], exposure: 0.015 }
+      ? { tint: [0.98, 1.0, 1.04], exposure: 0.02 }
       : cue.mood.name === 'autumnDusk' || cue.mood.name === 'deepDusk'
-        ? { tint: [1.08, 0.96, 0.88], exposure: -0.05 }
-        : { tint: [1.0, 1.0, 1.0], exposure: 0.015 },
+        ? { tint: [1.09, 0.95, 0.86], exposure: isWaterCue ? -0.06 : -0.04 }
+        : cue.focus === 'tower'
+          ? { tint: [1.0, 1.0, 1.02], exposure: 0.02 }
+          : { tint: [1.0, 1.0, 1.0], exposure: 0.015 },
   );
-  // 意象构图: 整帧向太阳方位横移, 让日轮/霞光真正入画, 主阁偏向一侧。
-  const sunFlat = new THREE.Vector3(preset.direction[0], 0, preset.direction[2]).normalize();
-  const lateral = new THREE.Vector3(-sunFlat.z, 0, sunFlat.x);
-  const camDistance = cueFlight.toPos.distanceTo(cueFlight.toTarget);
-  const frameShift = (cue.mood.name === 'clearDay' ? 2.5 : 7) * THREE.MathUtils.clamp(camDistance / 40, 0.4, 1.2);
-  cueFlight.toPos.addScaledVector(lateral, frameShift);
-  cueFlight.toTarget.addScaledVector(lateral, frameShift * 0.55);
   showSceneReading(cue);
-  if (status) status.textContent = `诗境机位 · ${cue.title}`;
+  if (status) status.textContent = `诗境机位 · ${cue.title} · ${cue.line}`;
 }
 
 function cancelCueFlight(): void {
-  if (!cueFlight && !sunMood) return;
+  if (!cueFlight && !sunMood && !cueHold) return;
   cueFlight = null;
+  cueHold = null;
+  activeCueId = null;
+  markActiveCueButton();
+  document.body.classList.remove('in-cue');
+  // 落幅焦距回正: 诗境长焦/广角不带回日常检视。
+  const persp = camera as THREE.PerspectiveCamera;
+  if (Math.abs(persp.fov - 42) > 0.1) {
+    persp.fov = 42;
+    persp.updateProjectionMatrix();
+  }
   poeticEnvironment.setMood(null);
   sunMood = null;
   postStack?.setMoodBias(null);
@@ -648,18 +773,46 @@ function cancelCueFlight(): void {
 }
 
 function updateCueFlight(): void {
-  if (!cueFlight) return;
-  const progress = Math.min(1, (performance.now() - cueFlight.start) / cueFlight.duration);
-  const eased = easeInOutCubic(progress);
-  camera.position.lerpVectors(cueFlight.fromPos, cueFlight.toPos, eased);
-  controls.target.lerpVectors(cueFlight.fromTarget, cueFlight.toTarget, eased);
-  if (progress >= 1) {
-    cueFlight = null;
-    controls.enabled = true;
-    // Once the cue settles, a whisper-slow drift keeps the frame alive —
-    // cinematic hold instead of a frozen still.
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.22;
+  if (cueFlight) {
+    const progress = Math.min(1, (performance.now() - cueFlight.start) / cueFlight.duration);
+    const eased = easeInOutCubic(progress);
+    // 二次贝塞尔弧线飞行: 起→中→落, 中点抬升带来“先扬后落”的呼吸。
+    // scratch 复用, 一帧零 new (原 4 次 clone)。
+    flightScratchA.copy(cueFlight.fromPos).lerp(cueFlight.midPos, eased);
+    flightScratchB.copy(cueFlight.midPos).lerp(cueFlight.toPos, eased);
+    camera.position.copy(flightScratchA.lerp(flightScratchB, eased));
+    flightScratchA.copy(cueFlight.fromTarget).lerp(cueFlight.midTarget, eased);
+    flightScratchB.copy(cueFlight.midTarget).lerp(cueFlight.toTarget, eased);
+    controls.target.copy(flightScratchA.lerp(flightScratchB, eased));
+    // 诗境运镜期间相机朝向由本系统接管: 每帧显式 lookAt, 不把朝向留给
+    // OrbitControls 的阻尼/限位做“二次解释”(2026-09 实测: 落幅视线偏 33°,
+    // 塔被甩出画外)。用户拖拽即 cancel, 之后朝向归还 controls。
+    camera.lookAt(controls.target);
+    // 焦距同步呼吸: 广角铺陈与长焦压缩在飞行中渐入, 落幅即定调。
+    const persp = camera as THREE.PerspectiveCamera;
+    persp.fov = THREE.MathUtils.lerp(cueFlight.fromFov, cueFlight.toFov, eased);
+    persp.updateProjectionMatrix();
+    if (progress >= 1) {
+      cueHold = { drift: cueFlight.drift.clone(), settledAt: performance.now() };
+      holdAnchorPos.copy(cueFlight.toPos);
+      cueFlight = null;
+      controls.enabled = true;
+      // 落幅后保持可交互: 用户可微调, 漂移在后台轻推, 一碰即停(见 pointerdown)。
+    }
+    return;
+  }
+  // 落幅漂移: 推/横移/上升三选一 + 正弦呼吸, 幅度克制(≤0.6m/4s), 构图不散。
+  if (cueHold && controls.enabled) {
+    const dt = Math.min(0.05, Math.max(0.001, renderDeltaHint || 0.016));
+    const t = (performance.now() - cueHold.settledAt) / 1000;
+    const breathe = 1 + Math.sin(t * 0.5) * 0.15;
+    flightScratchA.copy(cueHold.drift).multiplyScalar(dt * breathe);
+    // 漂移限幅: 离落幅点超过 3.5m 即停, 防止推进楼里或水里。
+    if (camera.position.distanceTo(holdAnchorPos) < 3.5) {
+      camera.position.add(flightScratchA);
+      controls.target.addScaledVector(flightScratchA, 0.82);
+      camera.lookAt(controls.target);
+    }
   }
 }
 
@@ -979,7 +1132,6 @@ window.addEventListener('china-towers-model-progress', (event) => {
     window.__CHINA_TOWERS_UI__.setLoaderProgress(detail.ratio ?? 0, `高模加载 ${detail.lod.toUpperCase()} · ${percentage}`);
   }
 });
-
 let lastFrameWidth = -1;
 let lastFrameHeight = -1;
 
@@ -1012,6 +1164,7 @@ function render() {
     renderer.info.reset();
   }
   const frameDelta = renderClock.getDelta();
+  renderDeltaHint = frameDelta;
   poeticEnvironment.update(frameDelta, camera);
   atmosphere.update(frameDelta, performance.now() / 1000, camera);
   // Key light eases toward the active cue's mood sun, or back to the tower's
@@ -1096,14 +1249,7 @@ function render() {
       // ignore readPixels failures in some browsers
     }
   }
-  if (window.__CHINA_TOWERS_UI__ && window.__CHINA_TOWERS_DIAGNOSTICS__?.ready) {
-    window.__CHINA_TOWERS_UI__.setModelMeta({
-      modelName: window.__CHINA_TOWERS_DIAGNOSTICS__.modelName,
-      runtimeLod: window.__CHINA_TOWERS_DIAGNOSTICS__.runtimeLod,
-      renderTriangles: window.__CHINA_TOWERS_DIAGNOSTICS__.renderTriangles,
-      partCount: window.__CHINA_TOWERS_DIAGNOSTICS__.partCount,
-    });
-  }
+  // 诊断读数保留在 window 对象供探针读取, 不再上墙显示。
   const loadingHighModel = HIGH_MODEL_IDS.has(activeSpec.id);
   if (!loadingHighModel || activeModel?.userData.highModelReady || activeModel?.userData.highModelLoadError) {
     window.__CHINA_TOWERS_READY__ = true;

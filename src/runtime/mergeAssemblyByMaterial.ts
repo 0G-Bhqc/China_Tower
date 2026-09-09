@@ -2,6 +2,54 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
+ * 镜像实例的绕序修复: 烘焙带镜像(行列式<0)的节点变换进顶点后,
+ * 三角面绕序反转——而 three.js 只对“变换矩阵行列式<0 的对象”做剔除补偿,
+ * 烘焙后的合并网格行列式已回正, 补偿消失, 镜像部件会被当成背面整片剔除
+ * (门扇镂空、构件凭空缺失)。烘焙时检测到镜像即翻转绕序, 法线保持
+ * applyMatrix4 的 normalMatrix 结果(镜像下本来就是对的)。
+ */
+export function flipWindingIfMirrored(geometry: THREE.BufferGeometry, bakeMatrix: THREE.Matrix4): void {
+  if (bakeMatrix.determinant() >= 0) return;
+  const index = geometry.getIndex();
+  if (index) {
+    const array = index.array as Uint16Array | Uint32Array;
+    for (let i = 0; i + 2 < array.length; i += 3) {
+      const tmp = array[i + 1];
+      array[i + 1] = array[i + 2];
+      array[i + 2] = tmp;
+    }
+    index.needsUpdate = true;
+  } else {
+    for (const name of Object.keys(geometry.attributes)) {
+      const attribute = geometry.getAttribute(name) as THREE.BufferAttribute;
+      const itemSize = attribute.itemSize;
+      const array = attribute.array as Float32Array;
+      const tmp = new Float32Array(itemSize);
+      for (let v = 0; v + 2 < attribute.count; v += 3) {
+        for (let c = 0; c < itemSize; c += 1) tmp[c] = array[(v + 1) * itemSize + c];
+        for (let c = 0; c < itemSize; c += 1) array[(v + 1) * itemSize + c] = array[(v + 2) * itemSize + c];
+        for (let c = 0; c < itemSize; c += 1) array[(v + 2) * itemSize + c] = tmp[c];
+      }
+      attribute.needsUpdate = true;
+    }
+  }
+  const morphs = geometry.morphAttributes as unknown as Record<string, THREE.BufferAttribute[] | undefined>;
+  for (const key of Object.keys(morphs)) {
+    for (const attribute of morphs[key] ?? []) {
+      const itemSize = attribute.itemSize;
+      const array = attribute.array as Float32Array;
+      const tmp = new Float32Array(itemSize);
+      for (let v = 0; v + 2 < attribute.count; v += 3) {
+        for (let c = 0; c < itemSize; c += 1) tmp[c] = array[(v + 1) * itemSize + c];
+        for (let c = 0; c < itemSize; c += 1) array[(v + 1) * itemSize + c] = array[(v + 2) * itemSize + c];
+        for (let c = 0; c < itemSize; c += 1) array[(v + 2) * itemSize + c] = tmp[c];
+      }
+      attribute.needsUpdate = true;
+    }
+  }
+}
+
+/**
  * Merge per-material geometry groups into single meshes so multi-thousand-mesh
  * GLB masters stop costing one draw call per mesh. Multi-material meshes and
  * non-indexed geometry are kept intact. Safety rules learned the hard way:
@@ -48,7 +96,9 @@ export function mergeAssemblyByMaterial(assembly: THREE.Group): number {
     // Always bake into a clone: originals must survive untouched for the
     // failure fallback (and some geometries are shared by several meshes).
     const baked = geometry.clone();
-    baked.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverseAssembly, mesh.matrixWorld));
+    const bakeMatrix = new THREE.Matrix4().multiplyMatrices(inverseAssembly, mesh.matrixWorld);
+    baked.applyMatrix4(bakeMatrix);
+    flipWindingIfMirrored(baked, bakeMatrix);
     group.geometries.push(baked);
     group.owners.push(mesh);
   }

@@ -44,6 +44,18 @@ async function responseBuffer(response: Response, options: PavilionModelLoadOpti
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let loaded = 0;
+  // 进度节流: 406MB 大师版按默认 16KB 分块会产生 2.5 万次进度事件,
+  // 每次都 dispatch + 写 DOM，直接把下载拖慢一个量级。按 1% 或 200ms 取大者上报。
+  let lastEmitRatio = -1;
+  let lastEmitTime = 0;
+  const emit = (force = false): void => {
+    const ratio = total > 0 ? loaded / total : 0;
+    const now = performance.now();
+    if (!force && ratio - lastEmitRatio < 0.01 && now - lastEmitTime < 200) return;
+    lastEmitRatio = ratio;
+    lastEmitTime = now;
+    options.onProgress?.({ loaded, total, ratio });
+  };
   while (true) {
     if (options.signal?.aborted) {
       await reader.cancel();
@@ -53,7 +65,7 @@ async function responseBuffer(response: Response, options: PavilionModelLoadOpti
     if (result.done) break;
     chunks.push(result.value);
     loaded += result.value.byteLength;
-    options.onProgress({ loaded, total, ratio: total > 0 ? loaded / total : 0 });
+    emit();
   }
   const joined = new Uint8Array(loaded);
   let offset = 0;
@@ -61,7 +73,7 @@ async function responseBuffer(response: Response, options: PavilionModelLoadOpti
     joined.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  options.onProgress({ loaded, total: total || loaded, ratio: 1 });
+  options.onProgress?.({ loaded, total: total || loaded, ratio: 1 });
   return joined.buffer;
 }
 
@@ -75,11 +87,21 @@ export async function loadVerifiedGlb(url: string, options: PavilionModelLoadOpt
   // otherwise sits at "…" for the whole multi-megabyte GLB fetch.
   const buffer = await responseBuffer(response, options);
   if (options.signal?.aborted) throw abortError();
+  return parseGlbBuffer(buffer, url, options.signal);
+}
+
+/**
+ * 解析已在内存的 GLB（预取命中后免二次下载）。
+ * 与 loadVerifiedGlb 共用同一各向异性修正。
+ */
+export async function parseGlbBuffer(
+  buffer: ArrayBuffer, url: string, signal?: AbortSignal,
+): Promise<GLTF> {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const baseUrl = new URL('.', new URL(url, window.location.href)).href;
   const gltf = await loader.parseAsync(buffer, baseUrl);
-  if (options.signal?.aborted) {
+  if (signal?.aborted) {
     disposeScene(gltf.scene);
     throw abortError();
   }

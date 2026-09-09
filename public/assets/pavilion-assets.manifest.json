@@ -244,37 +244,42 @@
         "faces": 5148034
       },
       "runtime": {
-        "loader": "createTengwangTowerHighModel",
-        "defaultTier": "lod1",
+      "loader": "createTengwangTowerHighModel",
+      "defaultTier": "master",
         "tiers": {
           "lod0": {
-            "purpose": "hero/master",
+            "purpose": "hero/master (offline-baked web derivative of tengwang-22753718.glb)",
             "status": "ready",
             "files": [
               {
-                "url": "/assets/tengwang-high-precision/tengwang-22753718.glb",
+                "url": "/assets/tengwang-high-precision/tengwang-master-web.glb",
                 "gltfVersion": 2,
-                "bytes": 426326380,
-                "sha256": "53e87792f62c5afb48a72c1fcfc1a9b0bb6c10d9942beae8911a4e590aceea69",
-                "meshCount": 4546,
-                "primitiveCount": 4794,
-                "triangles": 8375466,
-                "materialCount": 83,
+                "bytes": 84234016,
+                "sha256": "57b60014ca133cf338d383a334fe83ddd0f8f4cae502d826d3fc58e07f015aac",
+                "meshCount": 1374,
+                "primitiveCount": 1454,
+                "triangles": 2960154,
+                "materialCount": 55,
                 "compression": {
-                  "meshopt": false
+                  "meshopt": true
                 },
                 "extensionsUsed": [
-                  "KHR_materials_specular"
+                  "EXT_meshopt_compression",
+                  "KHR_materials_specular",
+                  "KHR_mesh_quantization"
                 ],
-                "extensionsRequired": []
+                "extensionsRequired": [
+                  "EXT_meshopt_compression",
+                  "KHR_mesh_quantization"
+                ]
               }
             ],
             "totals": {
-              "bytes": 426326380,
-              "meshes": 4546,
-              "primitives": 4794,
-              "triangles": 8375466,
-              "materials": 83
+              "bytes": 84234016,
+              "meshes": 1374,
+              "primitives": 1454,
+              "triangles": 2960154,
+              "materials": 55
             }
           },
           "lod1": {
@@ -468,8 +473,8 @@
     }
   ],
   "totals": {
-    "bytes": 697589980,
-    "triangles": 15706061,
+    "bytes": 355497616,
+    "triangles": 10290749,
     "assetCount": 4
   }
 }
