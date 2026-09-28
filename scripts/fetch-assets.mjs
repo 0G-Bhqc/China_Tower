@@ -3,9 +3,9 @@
 // 用法: node scripts/fetch-assets.mjs [--force]
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const REPO = '0G-Bhqc/China_Tower';
@@ -34,9 +34,13 @@ const actual = createHash('sha256').update(readFileSync(zipPath)).digest('hex');
 if (expected !== actual) throw new Error(`校验失败: 期望 ${expected}, 实际 ${actual}`);
 console.log('校验通过, 解压到 public/assets/ ...');
 
-// 注意: Windows bsdtar 不认绝对路径盘符冒号, 用 cwd + 相对路径
+// Windows bsdtar 把路径里的 `C:` 当远程主机名（且系统临时目录与仓库常跨盘，
+// relative() 拿不到相对路径），先把 zip 拷进 public/ 再用纯相对文件名解压。
 const publicDir = join(ROOT, 'public');
-execFileSync('tar', ['-xf', relative(publicDir, zipPath)], { cwd: publicDir });
+const localZip = join(publicDir, ZIP);
+copyFileSync(zipPath, localZip);
+execFileSync('tar', ['-xf', ZIP], { cwd: publicDir });
+rmSync(localZip, { force: true });
 writeFileSync(MARKER, `${TAG} ${actual}\n`);
 rmSync(work, { recursive: true, force: true });
 console.log('资产就绪, 可以 pnpm dev 了。');
