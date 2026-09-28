@@ -50,3 +50,8 @@ __pycache__/
 .workbuddy-ai/
 .zcode/
 .tmp-drt/
+
+# 流程性产物：调研参考纹理（运行时零引用，本地留存不进仓库）
+huanghe_textures/
+penglai_textures/
+tengwang_textures/
