@@ -1,6 +1,6 @@
 # 中国楼阁 · 高模 3D 藏品
 
-Three.js 中国楼阁高精度三维展示项目，包含岳阳楼、黄鹤楼、滕王阁三座经 DCC 高模解析的楼阁。
+Three.js 中国楼阁高精度三维展示项目，包含岳阳楼、黄鹤楼、滕王阁三座经 DCC 高模解析的楼阁，以楼阁对应诗文为主叙事。
 
 ## 预览
 
@@ -16,7 +16,7 @@ Three.js 中国楼阁高精度三维展示项目，包含岳阳楼、黄鹤楼�
 # 安装依赖
 pnpm install
 
-# 拉取运行时 3D 资产（约 350MB，Release 一键下载+校验，详见 docs/ASSETS.md）
+# 拉取运行时 3D 资产（约 350MB，Release 一键下载 + SHA-256 校验，详见 docs/ASSETS.md）
 pnpm assets
 
 # 开发服务器
@@ -28,6 +28,19 @@ pnpm build
 # 构建产物预览
 pnpm preview
 ```
+
+没跑 `pnpm assets` 也能启动：缺失 GLB 的楼阁会进入明确的降级模式（见 `src/runtime/loadVerifiedGlb.ts`）。
+
+Windows 下也可直接双击 `start-preview.cmd` 一键启动开发预览。
+
+## 部署成品
+
+```bash
+pnpm deploy                 # 构建 + 归档裁剪 + 契约校验，输出部署清单与缓存配置
+DEPLOY_BASE=/towers/ pnpm deploy   # 子路径部署（首尾斜杠都要有）
+```
+
+把 `dist/` 整体搬到站点对应路径即可，JS/CSS 引用与运行时 `/assets` 拉取自动收敛到同一基座。详见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ## 项目结构
 
@@ -43,69 +56,43 @@ pnpm preview
 ├── src/                    # 源代码
 │   ├── main.ts             # 应用入口 & 场景初始化
 │   ├── style.css           # 全局样式
-│   ├── runtime/            # 运行时模块
-│   │   ├── DeviceQualityProfile.ts
-│   │   ├── loadVerifiedGlb.ts
-│   │   ├── PavilionAssemblyRuntime.ts
-│   │   ├── createPlaqueMesh.ts
-│   │   ├── semanticSurfaceRecolor.ts
-│   │   └── sceneEnvironment.ts
-│   ├── createYueyangTowerFormModel.ts       # 岳阳楼手写模型
+│   ├── content/pavilionContent.ts          # 楼阁诗文内容
+│   ├── createYueyangTowerNativeModel.ts    # 岳阳楼手写模型
 │   ├── createYueyangTowerStructuralModel.ts # 岳阳楼结构模型
-│   ├── createYueyangTowerModel.ts           # 岳阳楼旧版模型
-│   ├── createObjectModel.ts                 # 通用对象模型
-│   ├── createTengwangTowerHighModel.ts      # 滕王阁高精度 GLB 集成
-│   ├── createHuangheTowerHighModel.ts       # 黄鹤楼高精度 GLB 集成
-│   ├── createPavilionGalleryModel.ts        # 楼阁画廊 & 规格定义
-│   ├── createTengwangProceduralTextures.ts  # 滕王阁程序化纹理
-│   └── g3-preview.ts                        # G3 预览工具
+│   ├── createTengwangTowerHighModel.ts     # 滕王阁高精度 GLB 集成
+│   ├── createHuangheTowerHighModel.ts      # 黄鹤楼高精度 GLB 集成
+│   ├── createPavilionGalleryModel.ts       # 楼阁画廊 & 规格定义
+│   ├── createTengwangProceduralTextures.ts # 滕王阁程序化纹理
+│   ├── runtime/            # 运行时模块（质量分档、GLB 校验加载、后处理、水面、 godrays、诗文卡等）
+│   └── vendor/             # meshopt 简化器
 │
 ├── public/                 # 静态资源
-│   └── assets/             # 3D 模型 & 纹理
-  │       ├── tengwang-high-precision/  # 滕王阁大师版 Web 烘焙版(61MB/78万面, 由 3D资产/tengwang-master-source/406MB 离线烘焙)
-│       ├── huanghe_textures/         # 黄鹤楼纹理
-│       ├── tengwang_textures/        # 滕王阁纹理
-│       └── penglai_textures/         # 蓬莱阁纹理
+│   ├── favicon.svg
+│   └── assets/             # HDRI、draco 解码器、瓦片纹理、资产清单（随 git 分发）
+│                           # 大体积运行时 GLB 不进 git，由 GitHub Release 分发（pnpm assets 拉取）
 │
-├── dist/                   # 生产构建产物（不提交）
-├── backup/                 # 备份目录
-│   ├── implementation-20260823_212627/  # Hermes 最终版本备份
-│   └── old-versions/        # 旧版本备份
+├── scripts/                # 成品链路脚本
+│   ├── fetch-assets.mjs    #   pnpm assets —— 从 Release 拉资产并校验
+│   ├── package-asset-pack.mjs # 维护者打包资产包
+│   ├── deploy-static.mjs   #   pnpm deploy —— 构建 + 部署输出
+│   ├── build-final-html.mjs / verify-final-html.mjs # dist 裁剪与契约校验
+│   └── shot-screenshots.mjs #  pnpm screenshots —— README 预览图
 │
-├── docs/                   # 项目文档
-│   ├── CURRENT-STATUS.md
-│   ├── engineering-implementation-v2.md
-│   ├── engineering-implementation-v3.md
-│   ├── isolated-max-conversion-sop.md
-│   ├── BLENDER_REBUILD_PLAN.md
-│   ├── CHINA_TOWER_SOURCE_REBUILD_NOTES.md
-│   └── RELEASE.md
-│
-├── references/             # 参考资料 & 调研文件
-│   ├── yueyang/            # 岳阳楼参考资料
-│   ├── 六楼阁调研资料包.zip
-│   ├── 工程文档_中国楼阁3D建造网页.pdf
-│   ├── object-sculpt-spec.json
-│   ├── tengwang-materials.json
-│   ├── tengwang-scale-verify.json
-│   └── tengwang-vertices.json
-│
-├── scripts/                # 构建 & 验证脚本
-│   └── validate-asset-pipeline.mjs
-│
-├── pipeline/               # 资产处理管道
-├── schemas/                # JSON Schema 定义
-│
-└── china-tower-pack-*.zip  # 完整构建包（包含 dist + 静态资源）
+└── docs/                   # 项目文档
+    ├── ASSETS.md           # 资产分级与分发策略
+    ├── RELEASE.md          # 部署说明与质量/调试参数
+    └── screenshots/        # 预览图
 ```
 
 ## 楼阁说明
 
 | 楼阁 | 模型类型 | 状态 |
 |------|---------|------|
-| 岳阳楼 | 手写程序化模型 | ✅ 完成 |
+| 岳阳楼 | 程序化结构模型 | ✅ 完成 |
 | 黄鹤楼 | 高精度 GLB | ✅ 完成 |
-| 滕王阁 | 高精度 GLB（426MB） | ✅ 完成 |
+| 滕王阁 | 高精度 GLB（hero 档另有大师级烘焙版） | ✅ 完成 |
+
+三座楼阁的运行时 GLB（各 LOD 档 + 环境 + 配景）统一由 Release 资产包分发，SHA-256 校验后解压到 `public/assets/`。
 
 ## 技术栈
 
@@ -114,20 +101,15 @@ pnpm preview
 - **包管理器**: pnpm
 - **后处理**: EffectComposer / UnrealBloomPass / BokehPass
 
-## 诊断开关
+## 质量与调试参数
 
-在 URL 参数中可启用诊断模式：
-
-- `?pavilion=tengwang` — 直接打开滕王阁
-- `?view=low-angle` — 仰视视角
-- `?noshadow=1` — 关闭阴影（诊断用）
+- 默认：设备检测自动选择 Standard 或 Mobile；`?quality=hero|standard|mobile` 可强制档位（hero 加载滕王阁大师版烘焙 GLB）。
+- `?pavilion=yueyang|huanghe|tengwang` — 直接打开指定楼阁
+- `?view=front|three-quarter|...|low-angle` — 固定审查视角
+- `?lod=lod0|lod1|lod2` — 强制 LOD 档（受控审查用）
+- `?noshadow=1` / `?nobloom=1` — 关闭阴影 / 泛光（诊断用）
 - `?hideglb=1` — 隐藏 GLB 模型（诊断用）
-
-## 版本管理
-
-- `backup/old-versions/` — 历史版本备份
-- `backup/implementation-20260823_212627/` — Hermes 最终版本
-- `china-tower-pack-*.zip` — 完整构建包副本
+- `?noadapt=1` — 关闭运行时自适应降载
 
 ## License
 

@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 
 const OUT = 'docs/screenshots';
 mkdirSync(OUT, { recursive: true });
@@ -10,8 +10,10 @@ const SHOTS = [
   { name: 'tengwang', url: 'http://127.0.0.1:5173/?interactive=1&pavilion=tengwang' },
 ];
 
+// WebGL 用 SwiftShader 软渲染出图；本机装有 Edge 时优先用 Edge，否则退回 Playwright 自带 Chromium。
+const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  executablePath: existsSync(EDGE) ? EDGE : undefined,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
 });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });

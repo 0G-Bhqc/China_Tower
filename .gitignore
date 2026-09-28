@@ -17,6 +17,28 @@ public/assets/feiyun-runtime/
 public/assets/tengwang-high-precision/
 public/assets/scene-pack/
 
+# 流程性产物：调研与过程文档（本地留存，不进仓库）
+references/
+docs/CONTINUATION-*.md
+docs/CURRENT-STATUS.md
+docs/engineering-implementation-*.md
+docs/BLENDER_REBUILD_PLAN.md
+docs/CHINA_TOWER_SOURCE_REBUILD_NOTES.md
+docs/isolated-max-conversion-sop.md
+
+# 流程性产物：DCC 资产处理管道（Blender/3ds Max 过程脚本，含本机路径与机器配置；本地留存不进仓库）
+pipeline/
+schemas/
+
+# scripts/ 白名单：只进成品链路所需（拉资产/打包/构建/部署/截图），其余过程脚本本地留存
+scripts/*
+!scripts/fetch-assets.mjs
+!scripts/package-asset-pack.mjs
+!scripts/deploy-static.mjs
+!scripts/build-final-html.mjs
+!scripts/verify-final-html.mjs
+!scripts/shot-screenshots.mjs
+
 # Editor / temp backups
 *.bak.*
 *.tmp
